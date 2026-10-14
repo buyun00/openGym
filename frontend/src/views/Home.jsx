@@ -15,6 +15,7 @@ import { Button } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
+import { measurementSeries, isKgLabel } from '../lib/measurements.js'
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
@@ -39,6 +40,20 @@ export default function Home() {
   const bw = lastBW(S)
   const prevBW = S.bodyweight.length > 1 ? S.bodyweight[S.bodyweight.length - 2] : null
   const delta = bw && prevBW ? bw.w - prevBW.w : null
+  // Lean mass (a "(kg)" custom measurement) and body fat % next to the weight: latest value, its
+  // date and the change since the previous check-in. Each is left out when it has no data.
+  const metricOf = (key, label, unit) => {
+    const pts = measurementSeries(S, key)
+    const last = pts.at(-1)
+    if (!last) return null
+    const prev = pts.at(-2)
+    return { key, label, unit, v: last.y, d: last.d, dl: prev ? Math.round((last.y - prev.y) * 10) / 10 : 0 }
+  }
+  const leanDef = (S.customMeasurements || []).find(c => isKgLabel(c.name))
+  const bodyMetrics = [
+    leanDef && metricOf('other:' + leanDef.id, String(leanDef.name).replace(/\s*[(\uFF08]\s*kg\s*[)\uFF09]/i, ''), 'kg'),
+    metricOf('bodyFat', t('Body fat'), '%'),
+  ].filter(Boolean)
 
   const ws = weekStartOf(S)
   // The first day of the shown week. Named for the role, not for Monday — which day that is
@@ -211,6 +226,26 @@ export default function Home() {
           <div className="small row" style={{ color: 'var(--yellow)', marginTop: 4, gap: 5 }}>
             <Icon name="target" style={{ fontSize: 13 }} />
             <span>{t('Goal')} {fmtNum(S.targetW)} {S.unit} · {Math.abs(S.targetW - bw.w) < 0.05 ? t('reached!') : t(S.targetW > bw.w ? '{0} to gain' : '{0} to lose', fmtNum(Math.abs(S.targetW - bw.w)) + ' ' + S.unit)}</span>
+          </div>
+        )}
+        {bodyMetrics.length > 0 && (
+          <div className="row" style={{ gap: 10, marginTop: 10, alignItems: 'stretch' }}>
+            {bodyMetrics.map(m => (
+              <div key={m.key} className="tappable" {...tappable(() => nav('/measurements'))}
+                style={{ flex: '1 1 0', minWidth: 0, padding: '8px 10px', borderRadius: 12, background: 'var(--fill, rgba(127,127,127,.12))', cursor: 'pointer' }}>
+                <div className="dim small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</div>
+                <div className="row" style={{ gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{fmtNum(m.v)} <span className="muted small">{m.unit}</span></span>
+                  {!!m.dl && (
+                    <span className="small row" style={{ gap: 2, fontWeight: 500 }}>
+                      <Icon name={m.dl > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 11 }} />
+                      {fmtNum(Math.abs(m.dl))}
+                    </span>
+                  )}
+                </div>
+                <div className="dim small">{fmtDate(m.d, true)}</div>
+              </div>
+            ))}
           </div>
         )}
         <div className="chart" style={{ marginTop: 8 }}><LineChart points={bwPoints} h={130} unit={S.unit} goal={S.targetW} /></div>

@@ -7,6 +7,7 @@ import {
   fromMeasurementDisplay, latestMeasurement, measurementEntryHasValues,
   measurementSeries, measurementUnit, measurementValue, normalizeMeasurementEntry,
   toMeasurementDisplay, normalizeMeasurementsState,
+  isKgLabel,
 } from '../lib/measurements.js'
 import { fmtDate, fmtNum, todayISO, uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
@@ -19,11 +20,11 @@ import { confirmSheet } from '../sheets.jsx'
 const update = (fn, ...rest) => useStore.getState().update(s => { fn(s); normalizeMeasurementsState(s) }, ...rest)
 const toast = message => useUI.getState().toast(message)
 
-const fieldUnit = (field, profileUnit) => field.key === 'bodyFat' ? '%' : measurementUnit(profileUnit)
+const fieldUnit = (field, profileUnit) => field.key === 'bodyFat' ? '%' : isKgLabel(field.label) ? 'kg' : measurementUnit(profileUnit)
 const shownValue = (entry, field, profileUnit) => {
   const value = measurementValue(entry, field.key)
   if (value == null) return null
-  return field.key === 'bodyFat' ? value : toMeasurementDisplay(value, profileUnit)
+  return field.key === 'bodyFat' || isKgLabel(field.label) ? value : toMeasurementDisplay(value, profileUnit)
 }
 
 function MeasurementLog({ sourceDate, close }) {
@@ -59,7 +60,7 @@ function MeasurementLog({ sourceDate, close }) {
       if (field.key === 'bodyFat' && value > 100) { toast(t('Body fat must be between 0 and 100%.')); return }
       if (field.custom) {
         const item = base.other.find(o => o.id === field.key.slice(6))
-        if (item) item.value = value == null ? null : fromMeasurementDisplay(value, S.unit)
+        if (item) item.value = value == null ? null : isKgLabel(field.label) ? value : fromMeasurementDisplay(value, S.unit)
       } else if (field.key === 'bodyFat') base.bodyFat = value
       else base[field.key] = value == null ? null : fromMeasurementDisplay(value, S.unit)
     }
@@ -171,7 +172,7 @@ export default function Measurements() {
   const key = available.some(f => f.key === selected) ? selected : fallback
   const field = available.find(f => f.key === key)
   const points = key ? measurementSeries(S, key, range) : []
-  const unit = key === 'bodyFat' ? '%' : measurementUnit(S.unit)
+  const unit = key === 'bodyFat' ? '%' : isKgLabel(field?.label) ? 'kg' : measurementUnit(S.unit)
   const all = key ? measurementSeries(S, key) : []
   const latest = all.at(-1)
   const previous = all.at(-2)

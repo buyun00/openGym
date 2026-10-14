@@ -60,10 +60,17 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
     const b = S.bodyweight.length, m = S.measurements.length;
     S.bodyweight = S.bodyweight.filter(e => e?.d !== date);
     S.measurements = S.measurements.filter(e => e?.d !== date);
-    return { date, deleted: { bodyweight: b - S.bodyweight.length, measurements: m - S.measurements.length } };
+    const [, mo, da] = date.split('-');
+    return { date, deleted: { bodyweight: b - S.bodyweight.length, measurements: m - S.measurements.length }, message: `${+mo}月${+da}日 已删除` };
   }
   if (weight == null && lean == null && fat == null) throw Object.assign(new Error('no metric'), { status: 400 });
   const out = { date };
+  // The previous record before this date, for the change shown in the message.
+  const before = (arr, get) => [...arr].filter(e => e && String(e.d) < date && get(e) != null)
+    .sort((a, b) => String(a.d).localeCompare(String(b.d))).map(get).at(-1) ?? null;
+  const prevW = before(S.bodyweight, e => (Number(e.w) > 0 ? (S.unit === 'lb' ? r1(e.w * 0.45359237) : +e.w) : null));
+  const prevF = before(S.measurements, e => (Number(e.bodyFat) > 0 ? +e.bodyFat : null));
+  const prevL = before(S.measurements, e => { const v = (e.other || []).find(o => o?.id === LEAN_ID)?.value; return Number(v) > 0 ? +v : null; });
   if (weight != null) {
     const w = S.unit === 'lb' ? r1(weight / 0.45359237) : weight;
     const rest = S.bodyweight.filter(e => e?.d !== date);
@@ -95,5 +102,14 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
       out.lean_mass_kg = lean;
     }
   }
+  const fx = n => r1(n).toFixed(1);
+  const chg = (v, p) => (p == null ? '' : '（较上次 ' + (r1(v - p) > 0 ? '+' : r1(v - p) < 0 ? '-' : '±') + fx(Math.abs(v - p)) + '）');
+  const [, mo, da] = date.split('-');
+  const lines = [`${+mo}月${+da}日 已记录`];
+  if (out.weight_kg != null) lines.push(`体重 ${fx(out.weight_kg)} kg${chg(out.weight_kg, prevW)}`);
+  if (out.lean_mass_kg != null) lines.push(`瘦体重 ${fx(out.lean_mass_kg)} kg${chg(out.lean_mass_kg, prevL)}`);
+  if (out.body_fat_pct != null) lines.push(`体脂率 ${fx(out.body_fat_pct)}%${chg(out.body_fat_pct, prevF)}`);
+  for (const k of ['weight_kg', 'lean_mass_kg', 'body_fat_pct']) if (out[k] != null) out[k] = r1(out[k]);
+  out.message = lines.join('\n');
   return out;
 }

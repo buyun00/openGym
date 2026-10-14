@@ -127,10 +127,14 @@ export function enabledMeasurementFields(state) {
   return [...builtins, ...custom]
 }
 
+// A custom measurement named with "(kg)" (e.g. lean body mass from the body hook) holds a mass,
+// not a length: shown and stored as entered, labelled kg, never converted cm<->in.
+export const isKgLabel = label => /[(\uFF08]\s*kg\s*[)\uFF09]/i.test(String(label || ''))
+
 export function measurementSeries(state, key, range = 0, now = Date.now()) {
   const cutoff = range ? now - range * 86400000 : -Infinity
   const unit = state.unit || 'kg'
-  const percent = key === 'bodyFat'
+  const percent = key === 'bodyFat' || (key.startsWith('other:') && isKgLabel(measurementLabel(key, state.customMeasurements || [])))
   return (state.measurements || []).map(entry => {
     const raw = measurementValue(entry, key)
     const at = new Date(entry.d + 'T12:00:00').getTime()
