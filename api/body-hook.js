@@ -51,6 +51,14 @@ export function parseDate(v, tz, now = Date.now()) {
 const validDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d + 'T12:00:00Z'));
 
 // Apply to a CLONE of the state. Returns a summary. `del` removes that day's hook values.
+// The entry time `t` is both the chart's x (weigh-in time) and the per-day sync stamp (later wins).
+// It is the given day at 09:00 Asia/Shanghai; a re-post of a day that already has a stamp at or past
+// that moves 1 ms past it, so the update still wins a merge without leaving its day.
+export const dayStamp = (date, prevT) => {
+  const base = Date.parse(date + 'T09:00:00+08:00');
+  return Number(prevT) >= base ? Number(prevT) + 1 : base;
+};
+
 export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now()) {
   if (!validDate(date)) throw Object.assign(new Error('invalid date'), { status: 400 });
   S.bodyweight = Array.isArray(S.bodyweight) ? S.bodyweight : [];
@@ -73,8 +81,9 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
   const prevL = before(S.measurements, e => { const v = (e.other || []).find(o => o?.id === LEAN_ID)?.value; return Number(v) > 0 ? +v : null; });
   if (weight != null) {
     const w = S.unit === 'lb' ? r1(weight / 0.45359237) : weight;
+    const old = S.bodyweight.find(e => e?.d === date);
     const rest = S.bodyweight.filter(e => e?.d !== date);
-    rest.push({ d: date, w, t: now });
+    rest.push({ d: date, w, t: dayStamp(date, old?.t) });
     rest.sort((a, b) => String(a.d).localeCompare(String(b.d)));
     S.bodyweight = rest; out.weight_kg = weight;
   }
@@ -88,12 +97,12 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
     }
     let e = S.measurements.find(x => x?.d === date);
     if (!e) {
-      e = { d: date, t: now }; for (const k of ALL_KEYS) e[k] = null;
+      e = { d: date, t: dayStamp(date) }; for (const k of ALL_KEYS) e[k] = null;
       e.other = S.customMeasurements.map(c => ({ id: c.id, name: c.name, value: null }));
       S.measurements.push(e);
       S.measurements.sort((a, b) => String(a.d).localeCompare(String(b.d)));
     }
-    e.t = now;
+    else e.t = dayStamp(date, e.t);
     if (fat != null) { e.bodyFat = fat; out.body_fat_pct = fat; }
     if (lean != null) {
       e.other = Array.isArray(e.other) ? e.other : [];
