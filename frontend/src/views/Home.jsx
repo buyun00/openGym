@@ -6,6 +6,7 @@ import { fmtNum, fmtDate, todayISO, isoOf, weekStartOf, weekDayOffset, DAYS, DAY
 import { t, tn, dateLocale } from '../lib/i18n.js'
 import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, starterPlanSheet, bwDeltaColor, weighInsSheet } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
+import BodyChart from '../components/BodyChart.jsx'
 import Icon from '../components/Icon.jsx'
 import QueueRow from '../components/QueueRow.jsx'
 import { queueOf, queueView, weekTally, pinState } from '../lib/queue.js'
@@ -52,7 +53,7 @@ export default function Home() {
   const leanDef = (S.customMeasurements || []).find(c => isKgLabel(c.name))
   const bodyMetrics = [
     leanDef && metricOf('other:' + leanDef.id, String(leanDef.name).replace(/\s*[(\uFF08]\s*kg\s*[)\uFF09]/i, ''), 'kg'),
-    metricOf('bodyFat', t('Body fat'), '%'),
+    metricOf('bodyFat', '\u4f53\u8102\u7387', '%'),
   ].filter(Boolean)
 
   const ws = weekStartOf(S)
@@ -107,6 +108,16 @@ export default function Home() {
   // The streak card's fraction: this calendar week's workouts over the weekdays with a plan, or,
   // in a coach week, the queue's sessions and your own days together (lib/queue.js weekTally).
   const { done: doneThisWeek, planned: plannedPerWeek } = weekTally(S, todayISO())
+  // The chart window: the last 30 weigh-ins' span, the same for every series.
+  const bodyFrom = S.bodyweight.length ? S.bodyweight.slice(-30)[0].d : ''
+  const seriesOf = (key, kind) => key === 'w'
+    ? S.bodyweight.filter(b => b.d >= bodyFrom).map(b => ({ d: b.d, y: b.w }))
+    : measurementSeries(S, key).filter(p => p.d >= bodyFrom).map(p => ({ d: p.d, y: p.y }))
+  const COLORS = { w: 'var(--acc)', lean: 'var(--blue)', fat: 'var(--orange)' }
+  const bodySeries = bodyMetrics.length ? [
+    bw && { key: 'w', label: '\u4f53\u91cd', unit: S.unit, color: COLORS.w, axis: 'l', points: seriesOf('w'), v: bw.w, dl: delta ? Math.round(delta * 10) / 10 : 0 },
+    ...bodyMetrics.map(m => ({ ...m, key: m.key, color: m.unit === '%' ? COLORS.fat : COLORS.lean, axis: m.unit === '%' ? 'r' : 'l', points: seriesOf(m.key) })),
+  ].filter(Boolean) : []
   const bwPoints = S.bodyweight.slice(-30).map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
 
   // today's session shown right under the week strip
@@ -228,27 +239,21 @@ export default function Home() {
             <span>{t('Goal')} {fmtNum(S.targetW)} {S.unit} · {Math.abs(S.targetW - bw.w) < 0.05 ? t('reached!') : t(S.targetW > bw.w ? '{0} to gain' : '{0} to lose', fmtNum(Math.abs(S.targetW - bw.w)) + ' ' + S.unit)}</span>
           </div>
         )}
-        {bodyMetrics.length > 0 && (
-          <div className="row" style={{ gap: 10, marginTop: 10, alignItems: 'stretch' }}>
-            {bodyMetrics.map(m => (
-              <div key={m.key} className="tappable" {...tappable(() => nav('/measurements'))}
-                style={{ flex: '1 1 0', minWidth: 0, padding: '8px 10px', borderRadius: 12, background: 'var(--fill, rgba(127,127,127,.12))', cursor: 'pointer' }}>
-                <div className="dim small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</div>
-                <div className="row" style={{ gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{fmtNum(m.v)} <span className="muted small">{m.unit}</span></span>
-                  {!!m.dl && (
-                    <span className="small row" style={{ gap: 2, fontWeight: 500 }}>
-                      <Icon name={m.dl > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 11 }} />
-                      {fmtNum(Math.abs(m.dl))}
-                    </span>
-                  )}
-                </div>
-                <div className="dim small">{fmtDate(m.d, true)}</div>
-              </div>
+        {/* Weight, lean mass (kg, left axis) and body fat (%, right axis) share one chart when the
+            extra metrics exist; the legend carries each latest value and its change. */}
+        {bodyMetrics.length > 0 ? <>
+          <div className="row" style={{ gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            {bodySeries.map(s => (
+              <span key={s.key} className="small row" style={{ gap: 4, alignItems: 'center' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: s.color, flex: 'none' }} />
+                <span className="dim">{s.label}</span>
+                <b>{fmtNum(s.v)}{s.unit === '%' ? '%' : ' ' + s.unit}</b>
+                {!!s.dl && <span className="row" style={{ gap: 1 }}><Icon name={s.dl > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 10 }} />{fmtNum(Math.abs(s.dl))}</span>}
+              </span>
             ))}
           </div>
-        )}
-        <div className="chart" style={{ marginTop: 8 }}><LineChart points={bwPoints} h={130} unit={S.unit} goal={S.targetW} /></div>
+          <div className="chart" style={{ marginTop: 6 }}><BodyChart series={bodySeries} h={150} goal={S.targetW} /></div>
+        </> : <div className="chart" style={{ marginTop: 8 }}><LineChart points={bwPoints} h={130} unit={S.unit} goal={S.targetW} /></div>}
         {/* every weigh-in, week by week with its average (Discord 'Weight') */}
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
           <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={weighInsSheet}>{t('All weigh-ins')}</Button>

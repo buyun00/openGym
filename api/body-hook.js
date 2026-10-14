@@ -2,7 +2,7 @@
 // push a day's weight, lean body mass and body-fat % into one profile. Pure helpers here; the
 // route in server.js does the locked read/stamp/write like PUT /api/data does.
 export const LEAN_ID = 'hook-lean-mass-kg';
-export const LEAN_NAME = '瘦体重 (kg)';
+export const LEAN_NAME = '\u53bb\u8102\u4f53\u91cd (kg)';
 const DEFAULT_KEYS = ['neck', 'shoulders', 'chest', 'waist', 'hips', 'upperArmLeft', 'upperArmRight',
   'forearmLeft', 'forearmRight', 'thighLeft', 'thighRight', 'calfLeft', 'calfRight'];
 const ALL_KEYS = [...DEFAULT_KEYS, 'abdomen', 'wristLeft', 'wristRight', 'ankleLeft', 'ankleRight', 'bodyFat'];
@@ -88,6 +88,8 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
     S.bodyweight = rest; out.weight_kg = weight;
   }
   if (lean != null || fat != null) {
+    for (const c of S.customMeasurements) if (c?.id === LEAN_ID) c.name = LEAN_NAME;
+    for (const e of S.measurements) for (const o of (e?.other || [])) if (o?.id === LEAN_ID) o.name = LEAN_NAME;
     if (lean != null && !S.customMeasurements.some(c => c?.id === LEAN_ID)) {
       S.customMeasurements.push({ id: LEAN_ID, name: LEAN_NAME, enabled: true });
     }
@@ -116,7 +118,7 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
   const [, mo, da] = date.split('-');
   const lines = [`${+mo}月${+da}日 已记录`];
   if (out.weight_kg != null) lines.push(`体重 ${fx(out.weight_kg)} kg${chg(out.weight_kg, prevW)}`);
-  if (out.lean_mass_kg != null) lines.push(`瘦体重 ${fx(out.lean_mass_kg)} kg${chg(out.lean_mass_kg, prevL)}`);
+  if (out.lean_mass_kg != null) lines.push(`去脂体重 ${fx(out.lean_mass_kg)} kg${chg(out.lean_mass_kg, prevL)}`);
   if (out.body_fat_pct != null) lines.push(`体脂率 ${fx(out.body_fat_pct)}%${chg(out.body_fat_pct, prevF)}`);
   for (const k of ['weight_kg', 'lean_mass_kg', 'body_fat_pct']) if (out[k] != null) out[k] = r1(out[k]);
   out.message = lines.join('\n');
