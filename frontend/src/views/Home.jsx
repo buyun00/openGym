@@ -6,7 +6,6 @@ import { fmtNum, fmtDate, todayISO, isoOf, weekStartOf, weekDayOffset, DAYS, DAY
 import { t, tn, dateLocale } from '../lib/i18n.js'
 import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, starterPlanSheet, bwDeltaColor, weighInsSheet } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
-import BodyChart from '../components/BodyChart.jsx'
 import Icon from '../components/Icon.jsx'
 import QueueRow from '../components/QueueRow.jsx'
 import { queueOf, queueView, weekTally, pinState } from '../lib/queue.js'
@@ -239,21 +238,19 @@ export default function Home() {
             <span>{t('Goal')} {fmtNum(S.targetW)} {S.unit} · {Math.abs(S.targetW - bw.w) < 0.05 ? t('reached!') : t(S.targetW > bw.w ? '{0} to gain' : '{0} to lose', fmtNum(Math.abs(S.targetW - bw.w)) + ' ' + S.unit)}</span>
           </div>
         )}
-        {/* Weight, lean mass (kg, left axis) and body fat (%, right axis) share one chart when the
-            extra metrics exist; the legend carries each latest value and its change. */}
-        {bodyMetrics.length > 0 ? <>
-          <div className="row" style={{ gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-            {bodySeries.map(s => (
-              <span key={s.key} className="small row" style={{ gap: 4, alignItems: 'center' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 4, background: s.color, flex: 'none' }} />
-                <span className="dim">{s.label}</span>
-                <b>{fmtNum(s.v)}{s.unit === '%' ? '%' : ' ' + s.unit}</b>
-                {!!s.dl && <span className="row" style={{ gap: 1 }}><Icon name={s.dl > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 10 }} />{fmtNum(Math.abs(s.dl))}</span>}
-              </span>
-            ))}
+        <div className="chart" style={{ marginTop: 8 }}><LineChart points={bwPoints} h={110} unit={S.unit} goal={S.targetW} /></div>
+        {/* Lean mass and body fat: one small chart each, own scale, own header. Hidden without data. */}
+        {bodySeries.filter(s => s.key !== 'w' && s.points.length).map(s => (
+          <div key={s.key} style={{ marginTop: 12 }}>
+            <div className="row" style={{ gap: 6, alignItems: 'baseline' }}>
+              <span className="small" style={{ fontWeight: 600, color: s.color }}>{s.label}</span>
+              <b>{fmtNum(s.v)}{s.unit === '%' ? '%' : ' ' + s.unit}</b>
+              {!!s.dl && <span className="small row" style={{ gap: 1, fontWeight: 500 }}><Icon name={s.dl > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 11 }} />{fmtNum(Math.abs(s.dl))}</span>}
+              <span className="dim small" style={{ marginInlineStart: 'auto' }}>{fmtDate(s.d, true)}</span>
+            </div>
+            <div className="chart" style={{ marginTop: 4 }}><LineChart points={s.points.map(p => ({ t: new Date(p.d + 'T12:00:00').getTime(), y: p.y, d: p.d }))} h={90} unit={s.unit} color={s.color} /></div>
           </div>
-          <div className="chart" style={{ marginTop: 6 }}><BodyChart series={bodySeries} h={150} goal={S.targetW} /></div>
-        </> : <div className="chart" style={{ marginTop: 8 }}><LineChart points={bwPoints} h={130} unit={S.unit} goal={S.targetW} /></div>}
+        ))}
         {/* every weigh-in, week by week with its average (Discord 'Weight') */}
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
           <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={weighInsSheet}>{t('All weigh-ins')}</Button>
