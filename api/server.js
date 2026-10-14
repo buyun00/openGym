@@ -33,6 +33,7 @@ import { createDeviceLink, findDeviceLink, burnDeviceLink, dropDeviceLinks } fro
 import { createMediaStore, mediaLimits, mediaConfig, MediaError, HASH_RE } from './media.js';
 import { effectiveRoutineId } from './queue.js';
 import { stampPut } from './sync-stamps.js';
+import * as bodyHook from './body-hook.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 
@@ -2290,6 +2291,43 @@ const routes = {
     json(res, 200, { ok: true, ts: body.state._ts || null, rev: curRev + 1, wid: body.state._wid });
   },
 
+  // Body-measurement webhook (body-hook.js). Bearer WEIGHT_HOOK_TOKEN, writes WEIGHT_HOOK_UID only.
+  'POST /api/hook/body': async (req, res) => {
+    const tok = process.env.WEIGHT_HOOK_TOKEN || '', uid = process.env.WEIGHT_HOOK_UID || '';
+    if (!tok || !uid) return json(res, 404, { error: 'not found' });
+    const got = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const a = Buffer.from(got), b = Buffer.from(tok);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return json(res, 401, { error: 'unauthorized' });
+    if (!db.users.some(u => u.id === uid)) return json(res, 404, { error: 'user not found' });
+    const body = await readBody(req);
+    const tz = process.env.WEIGHT_HOOK_TZ || 'Asia/Shanghai';
+    const date = bodyHook.parseDate(body.date, tz);
+    if (!date) return json(res, 400, { error: 'invalid date' });
+    const cur = readStateStrict(uid);
+    if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable' });
+    const base = cur || {};
+    const next = JSON.parse(JSON.stringify(base));
+    let result;
+    try {
+      result = bodyHook.applyBody(next, {
+        date, del: body.delete === true,
+        weight: bodyHook.parseKg(body.weight_kg ?? body.weight),
+        lean: bodyHook.parseKg(body.lean_mass_kg ?? body.lean_mass),
+        fat: bodyHook.parsePct(body.body_fat_pct ?? body.body_fat),
+      });
+    } catch (e) { if (e.status) return json(res, e.status, { error: e.message }); throw e; }
+    const curRev = base._rev || 0;
+    const report = {};
+    stampPut(cur, next, { overRead: true, stamped: false, report });
+    next._rev = curRev + (report.changed ? 2 : 1);
+    next._ts = Date.now();
+    next._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])]
+      .filter(x => typeof x === 'string').slice(-WID_KEEP);
+    next._wid = crypto.randomBytes(8).toString('hex');
+    atomicWrite(stateFile(uid), JSON.stringify(next));
+    stateCache.delete(uid);
+    json(res, 200, { ok: true, rev: next._rev, ...result });
+  },
   'GET /api/push/public-key': async (req, res) => json(res, 200, { key: vapid.publicKey }),
 
   'POST /api/push/subscribe': async (req, res) => {
