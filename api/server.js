@@ -2318,6 +2318,11 @@ const routes = {
       let txt; try { txt = JSON.stringify(raw); } catch { txt = String(raw); }
       console.log(`[hook] ${date} sleep raw (${Array.isArray(raw) ? 'array' : typeof raw}): ${String(txt).slice(0, 500)} => ${health.sleep_hours ?? 'null'}`);
     }
+    if ('sleep_stages' in body) {
+      let txt; try { txt = JSON.stringify(body.sleep_stages); } catch { txt = String(body.sleep_stages); }
+      const st = health._stages;
+      console.log(`[hook] ${date} sleep_stages raw (${Array.isArray(body.sleep_stages) ? 'array' : typeof body.sleep_stages}): ${String(txt).slice(0, 500)} => ${st ? JSON.stringify(st) : 'none'}`);
+    }
     const hasBody = metrics.weight != null || metrics.lean != null || metrics.fat != null;
     const hasHealth = Object.keys(health).length > 0;
     if (!del && !hasBody && !hasHealth) return json(res, 400, { error: 'no metric' });
@@ -2353,7 +2358,7 @@ const routes = {
       Object.assign(result, health);
       const lines = result.message ? result.message.split('\n') : [bodyHook.dateLine(date)];
       result.message = [...lines, ...bodyHook.healthLines(health)].join('\n');
-      const data = { date, sleep_hours: null, resting_hr: null, hrv_ms: null, steps: null, ...hdb[date] };
+      const data = { date, sleep_hours: null, deep_min: null, rem_min: null, core_min: null, awake_min: null, resting_hr: null, hrv_ms: null, steps: null, ...hdb[date] };
       delete data.t;
       for (const k of ['weight_kg', 'lean_mass_kg', 'body_fat_pct']) data[k] = result[k] ?? null;
       const ev = wh.envelope('health.daily', huser, data);

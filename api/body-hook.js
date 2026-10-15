@@ -185,6 +185,41 @@ export function parseSleep(v) {
   return total > 0 && total <= 24 ? r1(total) : null;
 }
 
+// sleep_stages: a list parallel to the sleep durations (same list formats), iOS stage names in
+// Chinese or English. Paired by index into minutes per stage; in-bed is ignored, and the sleep
+// total is every stage but awake and in-bed. Returns { ok, ... } or { ok: false, why }.
+const STAGES = [
+  ['inbed', /\u5367\u5e8a|\u5728\u5e8a|in\s*bed/],
+  ['awake', /\u6e05\u9192|awake/],
+  ['deep', /\u6df1\u5ea6|\u6df1\u7761|deep/],
+  ['rem', /rem|\u5feb\u901f\u52a8\u773c|\u5feb\u901f\u52d5\u773c/],
+  ['core', /\u6838\u5fc3|\u6d45\u7761|\u6dfa\u7720|core|light/],
+  ['asleep', /\u7761\u7720\u4e2d|\u5df2\u7761\u7740|\u5df2\u7761\u8457|\u7761\u7720|asleep|unspecified|sleep/],
+];
+export const stageOf = name => { const s = String(name ?? '').trim().toLowerCase(); if (!s) return null; return STAGES.find(([, re]) => re.test(s))?.[0] || 'unknown'; };
+export function parseSleepStages(sleepRaw, stagesRaw) {
+  if (blank(stagesRaw) || blank(sleepRaw)) return { ok: false, why: 'missing' };
+  const durs = sleepItems(sleepRaw).filter(it => !blank(it));
+  const names = sleepItems(typeof stagesRaw === 'string' ? stagesRaw.replace(/,/g, '\n') : stagesRaw).filter(it => !blank(it));
+  if (durs.length !== names.length) return { ok: false, why: `length mismatch: ${durs.length} durations, ${names.length} stages` };
+  const clock = durs.length > 1 && durs.some(it => /^\s*\d{1,3}:\d{2}(:\d{2})?\s*$/.test(String(it)));
+  const min = { deep: 0, rem: 0, core: 0, awake: 0, asleep: 0, inbed: 0 }, unknown = [];
+  for (let i = 0; i < durs.length; i++) {
+    const p = sleepItem(durs[i], clock);
+    if (!p) return { ok: false, why: 'unparsed duration #' + (i + 1) + ': ' + JSON.stringify(durs[i]) };
+    const h = p.h != null ? p.h : normHours(p.raw);
+    const st = stageOf(names[i]);
+    if (st === 'unknown') { unknown.push(String(names[i])); continue; }
+    min[st] += h * 60;
+  }
+  const out = { ok: true, deep_min: Math.round(min.deep), rem_min: Math.round(min.rem), core_min: Math.round(min.core), awake_min: Math.round(min.awake) };
+  if (min.asleep > 0) out.asleep_min = Math.round(min.asleep);
+  const total = (min.deep + min.rem + min.core + min.asleep) / 60;
+  if (total > 0 && total <= 24) out.sleep_hours = r1(total);
+  if (unknown.length) out.unknown = [...new Set(unknown)];
+  return out;
+}
+
 function intOf(v, lo, hi, thousands) {
   if (blank(v)) return null;
   let s = typeof v === 'number' ? String(v) : String(v).trim();
@@ -194,7 +229,16 @@ function intOf(v, lo, hi, thousands) {
 }
 export function parseHealth(b) {
   const out = {};
-  const sl = parseSleep(b.sleep_hours ?? b.sleep); if (sl != null) out.sleep_hours = sl;
+  const sraw = b.sleep_hours ?? b.sleep;
+  const sl = parseSleep(sraw); if (sl != null) out.sleep_hours = sl;
+  if (!blank(b.sleep_stages)) {
+    const st = parseSleepStages(sraw, b.sleep_stages);
+    if (st.ok) {
+      for (const k of ['deep_min', 'rem_min', 'core_min', 'awake_min', 'asleep_min']) if (st[k] != null) out[k] = st[k];
+      if (st.sleep_hours != null) out.sleep_hours = st.sleep_hours;
+    }
+    Object.defineProperty(out, '_stages', { value: st, enumerable: false });
+  }
   const hr = intOf(b.resting_hr, 20, 250); if (hr != null) out.resting_hr = Math.round(hr);
   const hv = intOf(b.hrv_ms ?? b.hrv, 1, 1000); if (hv != null) out.hrv_ms = r1(hv);
   const st = intOf(b.steps, 0, 300000, true); if (st != null) out.steps = Math.round(st);
@@ -203,6 +247,12 @@ export function parseHealth(b) {
 export function healthLines(h) {
   const lines = [];
   if (h.sleep_hours != null) lines.push(`\u7761\u7720 ${r1(h.sleep_hours).toFixed(1)} h`);
+  const sp = [];
+  if (h.deep_min != null) sp.push(`\u6df1\u7761 ${h.deep_min} \u5206`);
+  if (h.rem_min != null) sp.push(`REM ${h.rem_min} \u5206`);
+  if (h.core_min != null) sp.push(`\u6838\u5fc3 ${h.core_min} \u5206`);
+  if (h.awake_min != null) sp.push(`\u6e05\u9192 ${h.awake_min} \u5206`);
+  if (sp.length) lines.push(sp.join(' \u00b7 '));
   if (h.resting_hr != null) lines.push(`\u9759\u606f\u5fc3\u7387 ${h.resting_hr}`);
   if (h.hrv_ms != null) lines.push(`HRV ${Math.round(h.hrv_ms)} ms`);
   if (h.steps != null) lines.push(`\u6b65\u6570 ${h.steps.toLocaleString('en-US')}`);

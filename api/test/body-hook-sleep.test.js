@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSleep, parseHealth } from '../body-hook.js';
+import { parseSleep, parseHealth, parseSleepStages, stageOf } from '../body-hook.js';
 
 const cases = [
   ['7.2', 7.2], [7.2, 7.2], ['7,2', 7.2], ['7.2 h', 7.2], ['7 hr 12 min', 7.2], ['7 hours 12 minutes', 7.2],
@@ -25,4 +25,22 @@ test('parseSleep: empty is missing, not 0', () => {
 test('parseHealth other fields', () => {
   assert.deepEqual(parseHealth({ resting_hr: '58 bpm', hrv_ms: '42,5 ms', steps: '8,123' }), { resting_hr: 58, hrv_ms: 42.5, steps: 8123 });
   assert.deepEqual(parseHealth({ steps: '', resting_hr: null }), {});
+});
+
+test('stageOf names', () => {
+  const m = { '\u6838\u5fc3\u7761\u7720': 'core', Core: 'core', '\u6df1\u5ea6\u7761\u7720': 'deep', Deep: 'deep', '\u5feb\u901f\u52a8\u773c\u7761\u7720': 'rem', REM: 'rem',
+    '\u6e05\u9192': 'awake', '\u6e05\u9192\u65f6\u95f4': 'awake', Awake: 'awake', '\u5367\u5e8a': 'inbed', '\u5728\u5e8a\u4e0a': 'inbed', 'In Bed': 'inbed',
+    '\u7761\u7720\u4e2d': 'asleep', Asleep: 'asleep', Unspecified: 'asleep' };
+  for (const [k, v] of Object.entries(m)) assert.equal(stageOf(k), v, k);
+});
+test('sleep stages paired by index', () => {
+  const r = parseHealth({ sleep_hours: '30:00\n1:00:00\n2:00:00\n10:00\n8:00:00', sleep_stages: '\u6df1\u5ea6\u7761\u7720\nREM\n\u6838\u5fc3\u7761\u7720\n\u6e05\u9192\n\u5728\u5e8a\u4e0a' });
+  assert.deepEqual({ ...r }, { sleep_hours: 3.5, deep_min: 30, rem_min: 60, core_min: 120, awake_min: 10 });
+  const a = parseHealth({ sleep_hours: ['1 hr', '30 min'], sleep_stages: ['Core', 'Deep'] });
+  assert.equal(a.sleep_hours, 1.5); assert.equal(a.deep_min, 30);
+});
+test('sleep stages length mismatch keeps total', () => {
+  const r = parseHealth({ sleep_hours: '28:01\n2:24:36\n30\n4:00', sleep_stages: 'Core\nDeep' });
+  assert.equal(r.sleep_hours, 3); assert.equal(r.deep_min, undefined);
+  assert.equal(parseSleepStages('1:00\n2:00', 'Core').ok, false);
 });
