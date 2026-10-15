@@ -14,6 +14,11 @@ const cases = [
 test('parseSleep accepts Shortcuts duration formats', () => {
   for (const [v, want] of cases) assert.equal(parseSleep(v), want, JSON.stringify(v));
 });
+test('parseSleep: iOS m:ss / h:mm:ss list (Shortcuts Duration of sleep samples)', () => {
+  assert.equal(parseSleep('28:01\n2:24:36\n30\n4:00'), 3);
+  assert.equal(parseSleep('3:00\n2:30\n5:30\n1:00\n28:01\n15:00\n10:00\n18:00\n22:00\n6:30\n6:00\n9:00\n28:31\n29:01\n39:01\n13:30\n3:30\n37:01\n47:01\n42:01\n45:31\n21:30\n3:30\n20:30\n22:00\n3:00\n12:00\n2:24:36\n9:00\n4:00\n24:31\n52:02\n2:00\n30\n4:00\n1:00\n1:00\n22:00\n36:01\n7:30\n2:00\n8:00\n2:30\n4:00'), 13.6);
+  assert.equal(parseSleep('7:12'), 7.2);
+});
 test('parseSleep: empty is missing, not 0', () => {
   for (const v of ['', ' ', null, undefined, [], '\n']) assert.equal(parseSleep(v), null, JSON.stringify(v));
 });

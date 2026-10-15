@@ -140,13 +140,17 @@ const UNITS = [
   [/^(m|min|mins|minute|minutes|\u5206\u949f|\u5206\u9418|\u5206)$/, 1 / 60],
   [/^(s|sec|secs|second|seconds|\u79d2\u949f|\u79d2\u9418|\u79d2)$/, 1 / 3600],
 ];
-function sleepItem(v) {
-  if (typeof v === 'number') return Number.isFinite(v) ? { raw: v } : null;
-  if (v && typeof v === 'object') return sleepItem(v.value ?? v.duration ?? v.Duration ?? '');
+// clock: the item sits in a list of iOS-formatted durations ("28:01", "2:24:36", "30"), where
+// a:b is m:ss and a bare number is seconds. Alone, "7:12" stays h:mm.
+function sleepItem(v, clock = false) {
+  if (typeof v === 'number') return Number.isFinite(v) ? (clock ? { h: v / 3600 } : { raw: v }) : null;
+  if (v && typeof v === 'object') return sleepItem(v.value ?? v.duration ?? v.Duration ?? '', clock);
   const s = String(v ?? '').trim().toLowerCase();
   if (!s) return null;
   const m = /^(\d{1,3}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/.exec(s);
+  if (m && clock && m[3] == null) return { h: (+m[1] * 60 + +m[2]) / 3600 };
   if (m) return { h: +m[1] + +m[2] / 60 + (parseFloat(m[3]) || 0) / 3600 };
+  if (clock && /^\d+(?:\.\d+)?$/.test(s)) return { h: parseFloat(s) / 3600 };
   const re = /(\d+(?:\.\d+)?)\s*([a-z]+|[\u4e00-\u9fff]+)/g;
   let h = 0, hit = false, x;
   while ((x = re.exec(s))) {
@@ -169,9 +173,10 @@ export function sleepItems(v) {
 export function parseSleep(v) {
   if (blank(v)) return null;
   let h = 0, raw = 0, any = false, anyRaw = false;
-  for (const it of sleepItems(v)) {
-    if (blank(it)) continue;
-    const p = sleepItem(it); if (!p) continue;
+  const items = sleepItems(v).filter(it => !blank(it));
+  const clock = items.length > 1 && items.some(it => /^\s*\d{1,3}:\d{2}(:\d{2})?\s*$/.test(String(it)));
+  for (const it of items) {
+    const p = sleepItem(it, clock); if (!p) continue;
     any = true;
     if (p.h != null) h += p.h; else { raw += p.raw; anyRaw = true; }
   }
