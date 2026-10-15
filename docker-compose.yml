@@ -24,6 +24,10 @@ services:
       # X-Forwarded-For / X-Real-IP with the real peer — so the sign-in throttle may count
       # requests by those headers instead of lumping everyone in as "the web container".
       - TRUST_PROXY=${TRUST_PROXY:-1}
+      # Outbound workout webhooks (api/workout-webhook.js). Empty URL = off.
+      - WORKOUT_WEBHOOK_URL=${WORKOUT_WEBHOOK_URL:-}
+      - WORKOUT_WEBHOOK_SECRET=${WORKOUT_WEBHOOK_SECRET:-}
+      - WORKOUT_WEBHOOK_HEADERS=${WORKOUT_WEBHOOK_HEADERS:-}
     volumes:
       - ./data:/data         # users, passkeys, per-user state, session secret — BACK THIS UP
                              # (and uploads/: the photos and videos of custom exercises)
