@@ -35,6 +35,7 @@ import { effectiveRoutineId } from './queue.js';
 import { stampPut } from './sync-stamps.js';
 import * as bodyHook from './body-hook.js';
 import * as wh from './workout-webhook.js';
+import * as wmail from './workout-email.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 
@@ -2335,9 +2336,11 @@ const routes = {
     if (!user) return json(res, 401, { error: 'not signed in' });
     const body = await readBody(req);
     if (!wh.EVENT_TYPES.has(body.type) || body.type === 'test') return json(res, 400, { error: 'unknown event type' });
-    if (!wh.config().url) return json(res, 202, { ok: true, delivered: false, reason: 'disabled' });
+    const hookOn = !!wh.config().url, mailOn = !!wmail.emailConfig().to;
+    if (!hookOn && !mailOn) return json(res, 202, { ok: true, delivered: false, reason: 'disabled' });
     const ev = wh.envelope(body.type, user, body.data && typeof body.data === 'object' ? body.data : {});
-    wh.deliver(ev).catch(e => console.error('[webhook]', e));
+    if (hookOn) wh.deliver(ev).catch(e => console.error('[webhook]', e));
+    if (mailOn) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
     json(res, 202, { ok: true, id: ev.id });
   },
   // Admin session, or Bearer WORKOUT_WEBHOOK_SECRET: sends a test event and waits for the result.
@@ -2347,11 +2350,12 @@ const routes = {
     let user = readSession(req);
     const bySecret = secret && got && got.length === secret.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(secret));
     if (!(isAdmin(user) || bySecret)) return json(res, 403, { error: 'forbidden' });
-    if (!url) return json(res, 200, { ok: false, reason: 'WORKOUT_WEBHOOK_URL is empty' });
+    const mailOn = !!wmail.emailConfig().to;
+    if (!url && !mailOn) return json(res, 200, { ok: false, reason: 'WORKOUT_WEBHOOK_URL and WORKOUT_EMAIL_TO are empty' });
     if (!user) user = db.users.find(u => u.id === (process.env.WEIGHT_HOOK_UID || '')) || db.users[0] || { id: 'test', name: 'test' };
     const ev = wh.envelope('test', user, { message: 'openGym webhook test', sent_at: Date.now() });
-    const result = await wh.deliver(ev);
-    json(res, 200, { ...result, id: ev.id });
+    const [webhook, email] = await Promise.all([url ? wh.deliver(ev) : { skipped: true }, mailOn ? wmail.emailEvent(ev) : { skipped: true }]);
+    json(res, 200, { id: ev.id, webhook, email });
   },
   'GET /api/push/public-key': async (req, res) => json(res, 200, { key: vapid.publicKey }),
 

@@ -28,6 +28,9 @@ services:
       - WORKOUT_WEBHOOK_URL=${WORKOUT_WEBHOOK_URL:-}
       - WORKOUT_WEBHOOK_SECRET=${WORKOUT_WEBHOOK_SECRET:-}
       - WORKOUT_WEBHOOK_HEADERS=${WORKOUT_WEBHOOK_HEADERS:-}
+      # Email copy of each event (api/workout-email.js). Empty TO = off; SMTP_HOST empty = direct to MX.
+      - WORKOUT_EMAIL_TO=${WORKOUT_EMAIL_TO:-}
+      - WORKOUT_EMAIL_FROM=${WORKOUT_EMAIL_FROM:-}
     volumes:
       - ./data:/data         # users, passkeys, per-user state, session secret — BACK THIS UP
                              # (and uploads/: the photos and videos of custom exercises)
