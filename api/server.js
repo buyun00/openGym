@@ -2300,36 +2300,65 @@ const routes = {
     const got = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
     const a = Buffer.from(got), b = Buffer.from(tok);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return json(res, 401, { error: 'unauthorized' });
-    if (!db.users.some(u => u.id === uid)) return json(res, 404, { error: 'user not found' });
+    const huser = db.users.find(u => u.id === uid);
+    if (!huser) return json(res, 404, { error: 'user not found' });
     const body = await readBody(req);
     const tz = process.env.WEIGHT_HOOK_TZ || 'Asia/Shanghai';
     const date = bodyHook.parseDate(body.date, tz);
     if (!date) return json(res, 400, { error: 'invalid date' });
-    const cur = readStateStrict(uid);
-    if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable' });
-    const base = cur || {};
-    const next = JSON.parse(JSON.stringify(base));
-    let result;
-    try {
-      result = bodyHook.applyBody(next, {
-        date, del: body.delete === true,
-        weight: bodyHook.parseKg(body.weight_kg ?? body.weight),
-        lean: bodyHook.parseKg(body.lean_mass_kg ?? body.lean_mass),
-        fat: bodyHook.parsePct(body.body_fat_pct ?? body.body_fat),
-      });
-    } catch (e) { if (e.status) return json(res, e.status, { error: e.message }); throw e; }
-    const curRev = base._rev || 0;
-    const report = {};
-    stampPut(cur, next, { overRead: true, stamped: false, report });
-    next._rev = curRev + (report.changed ? 2 : 1);
-    next._ts = Date.now();
-    next._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])]
-      .filter(x => typeof x === 'string').slice(-WID_KEEP);
-    next._wid = crypto.randomBytes(8).toString('hex');
-    atomicWrite(stateFile(uid), JSON.stringify(next));
-    stateCache.delete(uid);
-    json(res, 200, { ok: true, rev: next._rev, ...result });
+    const del = body.delete === true;
+    const metrics = {
+      weight: bodyHook.parseKg(body.weight_kg ?? body.weight),
+      lean: bodyHook.parseKg(body.lean_mass_kg ?? body.lean_mass),
+      fat: bodyHook.parsePct(body.body_fat_pct ?? body.body_fat),
+    };
+    const health = del ? {} : bodyHook.parseHealth(body);
+    const hasBody = metrics.weight != null || metrics.lean != null || metrics.fat != null;
+    const hasHealth = Object.keys(health).length > 0;
+    if (!del && !hasBody && !hasHealth) return json(res, 400, { error: 'no metric' });
+    let result = { date };
+    if (del || hasBody) {
+      const cur = readStateStrict(uid);
+      if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable' });
+      const base = cur || {};
+      const next = JSON.parse(JSON.stringify(base));
+      try { result = bodyHook.applyBody(next, { date, del, ...metrics }); }
+      catch (e) { if (e.status) return json(res, e.status, { error: e.message }); throw e; }
+      const curRev = base._rev || 0;
+      const report = {};
+      stampPut(cur, next, { overRead: true, stamped: false, report });
+      next._rev = curRev + (report.changed ? 2 : 1);
+      next._ts = Date.now();
+      next._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])]
+        .filter(x => typeof x === 'string').slice(-WID_KEEP);
+      next._wid = crypto.randomBytes(8).toString('hex');
+      atomicWrite(stateFile(uid), JSON.stringify(next));
+      stateCache.delete(uid);
+      result.rev = next._rev;
+    }
+    // Daily health fields: sidecar file, one record per date (re-posting merges into it).
+    const hfile = path.join(DATA, 'health-' + uid.replace(/[^a-zA-Z0-9_-]/g, '') + '.json');
+    let hdb = {};
+    try { hdb = JSON.parse(fs.readFileSync(hfile, 'utf8')) || {}; } catch { hdb = {}; }
+    if (del) {
+      if (hdb[date]) { delete hdb[date]; atomicWrite(hfile, JSON.stringify(hdb), 0o600); result.deleted = { ...(result.deleted || {}), health: 1 }; }
+    } else if (hasHealth) {
+      hdb[date] = { ...(hdb[date] || {}), ...health, t: Date.now() };
+      atomicWrite(hfile, JSON.stringify(hdb), 0o600);
+      Object.assign(result, health);
+      const lines = result.message ? result.message.split('\n') : [bodyHook.dateLine(date)];
+      result.message = [...lines, ...bodyHook.healthLines(health)].join('\n');
+      const data = { date, sleep_hours: null, resting_hr: null, hrv_ms: null, steps: null, ...hdb[date] };
+      delete data.t;
+      for (const k of ['weight_kg', 'lean_mass_kg', 'body_fat_pct']) data[k] = result[k] ?? null;
+      const ev = wh.envelope('health.daily', huser, data);
+      result.event_id = ev.id;
+      if (wh.config().url) wh.deliver(ev).catch(e => console.error('[webhook]', e));
+      if (wmail.emailConfig().to) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
+    }
+    json(res, 200, { ok: true, ...result });
   },
+
   // Outbound workout webhooks (workout-webhook.js). Answers at once; delivery runs in background.
   'POST /api/events': async (req, res) => {
     const user = readSession(req);

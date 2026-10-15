@@ -124,3 +124,64 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
   out.message = lines.join('\n');
   return out;
 }
+
+// ---- Daily health fields (sleep, resting HR, HRV, steps): kept in a sidecar file per user,
+// health-<uid>.json = { "<date>": { sleep_hours, resting_hr, hrv_ms, steps, t } }.
+const blank = v => v == null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && !v.length);
+const numIn = s => { const m = /-?\d+(?:\.\d+)?/.exec(s); return m ? parseFloat(m[0]) : null; };
+const decComma = s => String(s).trim().replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+// One sleep item -> { h } (unit known) or { raw } (unitless number).
+function sleepItem(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? { raw: v } : null;
+  const s = decComma(v).toLowerCase();
+  if (!s) return null;
+  let m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(s);
+  if (m) return { h: +m[1] + +m[2] / 60 + (+m[3] || 0) / 3600 };
+  // "7 h 30 min", "7??30??", "450 min", "27000 s"
+  let h = 0, hit = false;
+  for (const [re, f] of [[/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|\u5c0f\u65f6|\u6642\u9593)/, 1], [/(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes|\u5206\u949f|\u5206)(?![a-z])/, 1 / 60], [/(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds|\u79d2)(?![a-z])/, 1 / 3600]]) {
+    const x = re.exec(s); if (x) { h += parseFloat(x[1]) * f; hit = true; }
+  }
+  if (hit) return { h };
+  const n = numIn(s);
+  return n == null ? null : { raw: n };
+}
+const normHours = n => (n >= 1440 ? n / 3600 : n > 24 ? n / 60 : n);
+export function parseSleep(v) {
+  if (blank(v)) return null;
+  const items = Array.isArray(v) ? v : typeof v === 'string' && /[\n;]/.test(v) ? v.split(/[\n;]+/) : [v];
+  let h = 0, raw = 0, any = false, anyRaw = false;
+  for (const it of items) {
+    if (blank(it)) continue;
+    const p = sleepItem(it); if (!p) continue;
+    any = true;
+    if (p.h != null) h += p.h; else { raw += p.raw; anyRaw = true; }
+  }
+  if (!any) return null;
+  const total = h + (anyRaw ? normHours(raw) : 0);
+  return total > 0 && total <= 24 ? r1(total) : null;
+}
+function intOf(v, lo, hi, thousands) {
+  if (blank(v)) return null;
+  let s = typeof v === 'number' ? String(v) : String(v).trim();
+  s = thousands ? s.replace(/(\d)[,\s\u00a0'](?=\d{3}\b)/g, '$1') : decComma(s);
+  const n = numIn(s);
+  return n != null && n >= lo && n <= hi ? n : null;
+}
+export function parseHealth(b) {
+  const out = {};
+  const sl = parseSleep(b.sleep_hours ?? b.sleep); if (sl != null) out.sleep_hours = sl;
+  const hr = intOf(b.resting_hr, 20, 250); if (hr != null) out.resting_hr = Math.round(hr);
+  const hv = intOf(b.hrv_ms ?? b.hrv, 1, 1000); if (hv != null) out.hrv_ms = r1(hv);
+  const st = intOf(b.steps, 0, 300000, true); if (st != null) out.steps = Math.round(st);
+  return out;
+}
+export function healthLines(h) {
+  const lines = [];
+  if (h.sleep_hours != null) lines.push(`\u7761\u7720 ${r1(h.sleep_hours).toFixed(1)} h`);
+  if (h.resting_hr != null) lines.push(`\u9759\u606f\u5fc3\u7387 ${h.resting_hr}`);
+  if (h.hrv_ms != null) lines.push(`HRV ${Math.round(h.hrv_ms)} ms`);
+  if (h.steps != null) lines.push(`\u6b65\u6570 ${h.steps.toLocaleString('en-US')}`);
+  return lines;
+}
+export const dateLine = (date, verb = '\u5df2\u8bb0\u5f55') => { const [, mo, da] = date.split('-'); return `${+mo}\u6708${+da}\u65e5 ${verb}`; };
