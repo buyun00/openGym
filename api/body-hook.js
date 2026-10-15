@@ -130,28 +130,46 @@ export function applyBody(S, { date, weight, lean, fat, del }, now = Date.now())
 const blank = v => v == null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && !v.length);
 const numIn = s => { const m = /-?\d+(?:\.\d+)?/.exec(s); return m ? parseFloat(m[0]) : null; };
 const decComma = s => String(s).trim().replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
-// One sleep item -> { h } (unit known) or { raw } (unitless number).
+// Sleep as iOS Shortcuts sends it: one total or a list of durations ("1 hr 23 min", "1??23??",
+// "1 ?? 23 ?", "1:23:00", seconds/minutes as plain numbers), as a JSON array, a JSON-array string,
+// or one string separated by newlines, ";", "?", "?" or ",". Each item: h:mm(:ss), unit pairs
+// summed, or a plain number. Plain numbers are summed and then read by size (<=24 h, <1440 min,
+// else s); items with units are converted on their own.
+const UNITS = [
+  [/^(h|hr|hrs|hour|hours|\u5c0f\u65f6|\u5c0f\u6642|\u65f6|\u6642|\u6642\u9593|\u4e2a\u5c0f\u65f6)$/, 1],
+  [/^(m|min|mins|minute|minutes|\u5206\u949f|\u5206\u9418|\u5206)$/, 1 / 60],
+  [/^(s|sec|secs|second|seconds|\u79d2\u949f|\u79d2\u9418|\u79d2)$/, 1 / 3600],
+];
 function sleepItem(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? { raw: v } : null;
-  const s = decComma(v).toLowerCase();
+  if (v && typeof v === 'object') return sleepItem(v.value ?? v.duration ?? v.Duration ?? '');
+  const s = String(v ?? '').trim().toLowerCase();
   if (!s) return null;
-  let m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(s);
-  if (m) return { h: +m[1] + +m[2] / 60 + (+m[3] || 0) / 3600 };
-  // "7 h 30 min", "7??30??", "450 min", "27000 s"
-  let h = 0, hit = false;
-  for (const [re, f] of [[/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|\u5c0f\u65f6|\u6642\u9593)/, 1], [/(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes|\u5206\u949f|\u5206)(?![a-z])/, 1 / 60], [/(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds|\u79d2)(?![a-z])/, 1 / 3600]]) {
-    const x = re.exec(s); if (x) { h += parseFloat(x[1]) * f; hit = true; }
+  const m = /^(\d{1,3}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/.exec(s);
+  if (m) return { h: +m[1] + +m[2] / 60 + (parseFloat(m[3]) || 0) / 3600 };
+  const re = /(\d+(?:\.\d+)?)\s*([a-z]+|[\u4e00-\u9fff]+)/g;
+  let h = 0, hit = false, x;
+  while ((x = re.exec(s))) {
+    const u = UNITS.find(([r]) => r.test(x[2]));
+    if (u) { h += parseFloat(x[1]) * u[1]; hit = true; }
   }
   if (hit) return { h };
   const n = numIn(s);
   return n == null ? null : { raw: n };
 }
 const normHours = n => (n >= 1440 ? n / 3600 : n > 24 ? n / 60 : n);
+export function sleepItems(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v !== 'string') return [v];
+  let s = v.trim();
+  if (s.startsWith('[')) { try { const j = JSON.parse(s); if (Array.isArray(j)) return j; } catch { /* not JSON */ } }
+  s = s.replace(/(\d),(\d{3})(?!\d)/g, '$1$2').replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+  return s.split(/[\n\r;,\uFF0C\u3001\uFF1B]+/);
+}
 export function parseSleep(v) {
   if (blank(v)) return null;
-  const items = Array.isArray(v) ? v : typeof v === 'string' && /[\n;]/.test(v) ? v.split(/[\n;]+/) : [v];
   let h = 0, raw = 0, any = false, anyRaw = false;
-  for (const it of items) {
+  for (const it of sleepItems(v)) {
     if (blank(it)) continue;
     const p = sleepItem(it); if (!p) continue;
     any = true;
@@ -161,6 +179,7 @@ export function parseSleep(v) {
   const total = h + (anyRaw ? normHours(raw) : 0);
   return total > 0 && total <= 24 ? r1(total) : null;
 }
+
 function intOf(v, lo, hi, thousands) {
   if (blank(v)) return null;
   let s = typeof v === 'number' ? String(v) : String(v).trim();

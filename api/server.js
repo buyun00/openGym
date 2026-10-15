@@ -2313,6 +2313,11 @@ const routes = {
       fat: bodyHook.parsePct(body.body_fat_pct ?? body.body_fat),
     };
     const health = del ? {} : bodyHook.parseHealth(body);
+    if ('sleep_hours' in body || 'sleep' in body) {
+      const raw = body.sleep_hours ?? body.sleep;
+      let txt; try { txt = JSON.stringify(raw); } catch { txt = String(raw); }
+      console.log(`[hook] ${date} sleep raw (${Array.isArray(raw) ? 'array' : typeof raw}): ${String(txt).slice(0, 500)} => ${health.sleep_hours ?? 'null'}`);
+    }
     const hasBody = metrics.weight != null || metrics.lean != null || metrics.fat != null;
     const hasHealth = Object.keys(health).length > 0;
     if (!del && !hasBody && !hasHealth) return json(res, 400, { error: 'no metric' });
