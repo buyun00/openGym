@@ -488,10 +488,7 @@ export default function Settings({ page = null, find = null, via = null }) {
       <Section title={t('Before and during')}>
         {/* The quick weigh-in that opens on Start (sheets.jsx startFlow, issue #137); off skips
             straight to the session. Home and Stats still log weight by hand. */}
-        <Row icon="scale" iconTint="var(--green)" title={t('Weigh in before workouts')}
-          subtitle={t('Asks for your body weight when a workout starts. Off starts the session straight away.')}>
-          <Switch checked={S.weighIn !== false} onChange={v => update(s => { s.weighIn = v })} />
-        </Row>
+        {/* Local change: the pre-workout weigh-in is removed (sheets.jsx startFlow), so is its toggle. */}
         {(wakeOK || !MOBILE) && (
           <Row icon="phoneScreen" iconTint="var(--yellow)" title={t('Keep screen awake')}
             subtitle={wakeOK ? t('The screen stays on while a workout is running, so you don’t have to unlock your phone between sets.') : t('Not supported in this browser.')}>

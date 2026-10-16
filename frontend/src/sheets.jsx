@@ -2770,8 +2770,9 @@ export function DayNoteRow({ iso, note }) {
 export function startFlow(routineIds) {
   // The weigh-in is a setting (Settings → During a workout, issue #137): off goes straight
   // into the session with no body weight on it, same as "Start without weighing in".
-  if (S().weighIn === false) { beginWorkout(routineIds, null); return }
-  bwSheet({ required: true, onDone: bw => beginWorkout(routineIds, bw) })
+  // Local change: no weigh-in step at all. The session carries the latest logged weight (body
+  // hook, Home, Stats) so bodyweight-based exercises still have one.
+  beginWorkout(routineIds, lastBW(S())?.w ?? null)
 }
 export function beginWorkout(routineIds, bw) {
   const st = S()
@@ -2814,9 +2815,7 @@ export function repeatWorkout(w, close) {
     if (close) closeThenNav(close, '/workout'); else navToWorkout()
     if (skipped) toast(tn('{0} exercise no longer exists and was left out.', '{0} exercises no longer exist and were left out.', skipped))
   }
-  if (st.weighIn === false) { go(null); return }
-  if (close) close()
-  bwSheet({ required: true, onDone: go })
+  go(lastBW(st)?.w ?? null)
 }
 
 /* ============================ log a past workout ============================ */
