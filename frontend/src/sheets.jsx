@@ -13,7 +13,7 @@ import { t, tn, dateLocale, instrFor, instrTranslated, descFor, exerciseNameFor,
 import { nav, closeThenNav, navToWorkout } from './lib/nav.js'
 import { buildStarterPlan, starterPlanDays, starterPlanOptions } from './lib/starter.js'
 import Media, { Thumb } from './components/Media.jsx'
-import { equipExIds, sortMineFirst } from './lib/equipment.js'
+import { equipExIds, sortMineFirst } from './lib/gym-equipment.js'
 import CustomMediaField from './components/CustomMediaField.jsx'
 import WorkoutMediaSection, { workoutMediaCount } from './components/WorkoutMedia.jsx'
 import { mediaOf, normalizeMediaRef, cleanUrl, workoutMediaOf } from './lib/media-refs.js'
