@@ -36,6 +36,7 @@ import { stampPut } from './sync-stamps.js';
 import * as bodyHook from './body-hook.js';
 import * as wh from './workout-webhook.js';
 import * as wmail from './workout-email.js';
+import * as equip from './equipment.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 
@@ -1907,6 +1908,45 @@ function dataWritable() {
   return ok;
 }
 
+
+// A server-side change to one profile's document (body hook, equipment): read, mutate a copy,
+// stamp what changed like an API client's PUT (sync-stamps.js), bump the revision, write.
+function serverWrite(uid, mutate) {
+  const cur = readStateStrict(uid);
+  if (cur === UNREADABLE) throw new HttpError(503, 'state unreadable');
+  const base = cur || {};
+  const next = JSON.parse(JSON.stringify(base));
+  const result = mutate(next);
+  const curRev = base._rev || 0;
+  const report = {};
+  stampPut(cur, next, { overRead: true, stamped: false, report });
+  next._rev = curRev + (report.changed ? 2 : 1);
+  next._ts = Date.now();
+  next._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])]
+    .filter(x => typeof x === 'string').slice(-WID_KEEP);
+  next._wid = crypto.randomBytes(8).toString('hex');
+  atomicWrite(stateFile(uid), JSON.stringify(next));
+  stateCache.delete(uid);
+  return { result, rev: next._rev };
+}
+// The body/equipment hook's Bearer token (WEIGHT_HOOK_TOKEN), bound to WEIGHT_HOOK_UID.
+function hookUser(req) {
+  const tok = process.env.WEIGHT_HOOK_TOKEN || '', uid = process.env.WEIGHT_HOOK_UID || '';
+  if (!tok || !uid) return null;
+  const got = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const a = Buffer.from(got), b = Buffer.from(tok);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return db.users.find(u => u.id === uid) || null;
+}
+const EQUIP_DIR = path.join(DATA, 'equipment-photos');
+function saveEquipPhoto(data) {
+  const p = equip.decodePhoto(data);
+  fs.mkdirSync(EQUIP_DIR, { recursive: true, mode: 0o700 });
+  const file = path.join(EQUIP_DIR, p.name);
+  if (!fs.existsSync(file)) atomicWrite(file, p.buf, 0o600);
+  return p.name;
+}
+const equipErr = (res, e) => { if (e && e.status) return json(res, e.status, { error: e.message }); throw e; };
 const routes = {
   // 503 rather than a flag in a 200: the container healthcheck is `wget --spider`, which reads
   // the status and nothing else, and an instance that cannot write its data directory is exactly
@@ -2367,6 +2407,75 @@ const routes = {
       if (wmail.emailConfig().to) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
     }
     json(res, 200, { ok: true, ...result });
+  },
+
+  // ---- Gym equipment library (equipment.js) ----
+  'GET /api/equipment': async (req, res) => {
+    const user = readSession(req) || hookUser(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const S = readStateStrict(user.id);
+    if (S === UNREADABLE) return json(res, 503, { error: 'state unreadable' });
+    json(res, 200, { items: records(S?.gymEquipment) });
+  },
+  'POST /api/equipment': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try {
+      const { result, rev } = serverWrite(user.id, S => equip.upsert(S, body.item || body));
+      json(res, result.created ? 201 : 200, { ok: true, rev, ...result });
+    } catch (e) { return equipErr(res, e); }
+  },
+  'DELETE /api/equipment': async (req, res) => {
+    const user = readSession(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const url = new URL(req.url, 'http://x');
+    const id = url.searchParams.get('id');
+    if (!id) return json(res, 400, { error: 'id required' });
+    const { result, rev } = serverWrite(user.id, S => equip.remove(S, { id }));
+    json(res, result ? 200 : 404, { ok: !!result, removed: result, rev });
+  },
+  'POST /api/equipment/photo': async (req, res) => {
+    const user = readSession(req) || hookUser(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const body = await readBody(req);
+    try { json(res, 200, { ok: true, photo: saveEquipPhoto(body.data || body.photo_base64) }); } catch (e) { return equipErr(res, e); }
+  },
+  'GET /api/equipment/photo': async (req, res) => {
+    const user = readSession(req) || hookUser(req);
+    if (!user) return json(res, 401, { error: 'not signed in' });
+    const f = new URL(req.url, 'http://x').searchParams.get('f') || '';
+    if (!equip.PHOTO_RE.test(f)) return json(res, 400, { error: 'bad name' });
+    let buf;
+    try { buf = fs.readFileSync(path.join(EQUIP_DIR, f)); } catch { return json(res, 404, { error: 'not found' }); }
+    res.writeHead(200, { 'Content-Type': f.endsWith('.png') ? 'image/png' : f.endsWith('.webp') ? 'image/webp' : 'image/jpeg', 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Length': buf.length });
+    res.end(buf);
+  },
+  // Bot hook (Bearer WEIGHT_HOOK_TOKEN): add/update an item (by id or same name), optional photo,
+  // or { delete: true, id | name }. GET /api/hook/equipment lists.
+  'GET /api/hook/equipment': async (req, res) => {
+    const user = hookUser(req);
+    if (!user) return json(res, 401, { error: 'unauthorized' });
+    const S = readStateStrict(user.id);
+    if (S === UNREADABLE) return json(res, 503, { error: 'state unreadable' });
+    json(res, 200, { items: records(S?.gymEquipment) });
+  },
+  'POST /api/hook/equipment': async (req, res) => {
+    const user = hookUser(req);
+    if (!user) return json(res, 401, { error: 'unauthorized' });
+    const body = await readBody(req);
+    try {
+      if (body.delete === true) {
+        const { result, rev } = serverWrite(user.id, S => equip.remove(S, { id: body.id, name: body.name }));
+        return json(res, result ? 200 : 404, { ok: !!result, removed: result, rev });
+      }
+      const raw = { ...body };
+      delete raw.photo_base64;
+      if (body.photo_base64) raw.photo = saveEquipPhoto(body.photo_base64);
+      const { result, rev } = serverWrite(user.id, S => equip.upsert(S, raw));
+      console.log('[hook] equipment ' + (result.created ? 'created ' : 'updated ') + result.item.id);
+      json(res, result.created ? 201 : 200, { ok: true, rev, ...result });
+    } catch (e) { return equipErr(res, e); }
   },
 
   // Outbound workout webhooks (workout-webhook.js). Answers at once; delivery runs in background.

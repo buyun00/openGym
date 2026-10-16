@@ -184,6 +184,9 @@ export const DEF = {
   // kind of code the gym issued. Just data, so it syncs and backs up like everything else.
   //   [{ id, label, value, fmt }]
   gymCards: [],
+  // Gym equipment library (views/Equipment.jsx, api/equipment.js): [{ id, name, primary, secondary,
+  // exIds, exNames, note, location, photo, _ts }]. Synced like gymCards.
+  gymEquipment: [],
   // The card the check-in screen last settled on, so it reopens where you left it (handy when
   // you have more than one gym). Holds a gymCards id, or null before any card exists / is chosen;
   // a stale id (card since removed) is simply ignored by the view.
