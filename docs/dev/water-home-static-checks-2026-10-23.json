@@ -1,0 +1,52 @@
+{
+  "scope": "Windows static syntax and project structure only; NOT Swift typecheck, Metal compilation, Swift test execution or iOS runtime",
+  "swift_files_parsed": 22,
+  "checks": {
+    "swift_syntax": true,
+    "project_object_identifiers": true,
+    "all_native_sources_in_build": true,
+    "metal_in_sources": true,
+    "license_in_resources": true,
+    "motion_usage_description": true,
+    "system_tab_view": true,
+    "home_scope": true,
+    "no_webview_home": true,
+    "separate_persistence": true
+  },
+  "syntax_errors": [],
+  "missing_build_sources": [],
+  "existing_generated_prerequisites_missing": [
+    "App/App/public",
+    "App/App/config.xml",
+    "App/App/capacitor.config.json",
+    "App/Pods"
+  ],
+  "sha256": {
+    "frontend/ios/App/App/Native/BodyView.swift": "ade81defc2a2f50f4184f54ff9592a1afdaf380d58844a79aa7ea626595686a4",
+    "frontend/ios/App/App/Native/Catalogue.swift": "0caff92a0e2314a3a31371fdf76d33680212dc494d0f51b78651fb7aaf7b3c95",
+    "frontend/ios/App/App/Native/EquipmentView.swift": "b34b2aea5853d5a76ca0a64bdd92f08353ed4e1d0c0e745e4642bf7f1b20156a",
+    "frontend/ios/App/App/Native/GymModels.swift": "225efa4e58dc1a8e50e45e1133a59cb4b1c9d9422c6b76aef69b8504e5652b3d",
+    "frontend/ios/App/App/Native/GymStore.swift": "87b9bc73caf8e244e81fc9907a7caabdb608dd351335fa15074aea29d2176c2c",
+    "frontend/ios/App/App/Native/LibraryView.swift": "8908de8ced7f35990ac9ad2a1473dff8a7de92f701497fea0ef8232c14cc74fd",
+    "frontend/ios/App/App/Native/PlanView.swift": "4fbea77574529a58d4cf3a68502adde92b4f1e250408676aa7f43ae9f27608aa",
+    "frontend/ios/App/App/Native/RootView.swift": "bfc07949d6c147633e32723d6ac47ee0f16ecd2866506579779a8bdb4a32c132",
+    "frontend/ios/App/App/Native/RoutineEditorView.swift": "791cf88465c9d2d4ec1927be5d6d6657bd137f91700fbe5c05610c9b7ff91684",
+    "frontend/ios/App/App/Native/TodayView.swift": "4d3a577d2d35a2c0fcb059b43254c68d1a85fff84219cebfb95ebb9995c4e357",
+    "frontend/ios/App/App/Native/WaterBackground.swift": "5eb57a65ad860296dd03d5173a44395e100cda9e561e23a5dfac9f6caec58527",
+    "frontend/ios/App/App/Native/WaterMotion.swift": "6c599022357230d975f4a60db57b1d4206d8398709a2a47859654732cfdac968",
+    "frontend/ios/App/App/Native/WaterPhysics.swift": "be868dda44c7e839bf8cccaf326da0cf46eeebf5c2bfa3ad5d5adf3f037f7889",
+    "frontend/ios/App/App/Native/WaterView.swift": "b8557a3923b2c4c7bbce21bc0835103dc24a2bb00d7bfeb27d7deeaac0675db7",
+    "frontend/ios/App/App/Native/WellnessModels.swift": "b2ae5e6f1bda6d37b41c2279b754d95a00da34c4af9f65a5135d9cf839cef127",
+    "frontend/ios/App/App/Native/WellnessNotifications.swift": "4470999e2b8bd93c97fb54aeb10511add6697d63fc22adff1ceaae5fe94db47e",
+    "frontend/ios/App/App/Native/WellnessPersistence.swift": "9237f7f30d7756c8c7b5d007dbc7f3bf9f7427daba2b5820abc67edbcbc12b3c",
+    "frontend/ios/App/App/Native/WellnessSettingsSheet.swift": "ba22f0e4814a4d93639c693d6fa68375c8a9f9579c3b958ace45a9cb123a7299",
+    "frontend/ios/App/App/Native/WellnessStore.swift": "25121d40c8580a8fd1cf37133aed011ae186fcec27ed34b8bfc29fcf63b6e1fe",
+    "frontend/ios/App/App/Native/WorkoutView.swift": "864b4011f78dbc58892c8bc7f65b6dd55196d4f4d84b6173d59fc0c12bfcd8ef",
+    "frontend/ios/Tests/WellnessCoreTests/WellnessCoreTests.swift": "1ef0a692e7e2e3d579a8014559ea147790bf1471785e5c1896ac0599b5a53e6b",
+    "frontend/ios/Package.swift": "867baa73d70d53a71f8e26e2720b1b32a026db5e8f3c0c05e30e2dea40892ee7",
+    "frontend/ios/App/App/Native/WaterScene.metal": "c895cd48ceb54782e506e9017e2a51f9aa2aa9705d520775425b53af21c7057a",
+    "frontend/ios/App/App/Native/WaterThirdPartyNotices.txt": "48a5b96d6426d835725a669a51343daff1885ccd2474d7461fa3a9ecc6d80e71",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj": "c9805e1f138b424429edec6a20aa7dacb5b1fb9d68b56416671289decc8d9c09",
+    "frontend/ios/App/App/Info.plist": "e7e8180ff5f27ef380d55023a6aa661ee68d039c786536d9db9acefad4c2dcb5"
+  }
+}

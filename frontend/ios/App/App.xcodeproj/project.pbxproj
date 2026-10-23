@@ -31,6 +31,16 @@
 		A1000000000000000000001B /* EquipmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* EquipmentView.swift */; };
 		A1000000000000000000001C /* RoutineEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* RoutineEditorView.swift */; };
 		A1000000000000000000001D /* exercises.json in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000D /* exercises.json */; };
+		A21000000000000000000001 /* WellnessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* WellnessModels.swift */; };
+		A21000000000000000000002 /* WellnessPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* WellnessPersistence.swift */; };
+		A21000000000000000000003 /* WellnessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* WellnessStore.swift */; };
+		A21000000000000000000004 /* WellnessNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* WellnessNotifications.swift */; };
+		A21000000000000000000005 /* WellnessSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* WellnessSettingsSheet.swift */; };
+		A21000000000000000000006 /* WaterPhysics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* WaterPhysics.swift */; };
+		A21000000000000000000007 /* WaterMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* WaterMotion.swift */; };
+		A21000000000000000000008 /* WaterBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* WaterBackground.swift */; };
+		A21000000000000000000009 /* WaterScene.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* WaterScene.metal */; };
+		A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* WaterThirdPartyNotices.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +72,16 @@
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		A20000000000000000000001 /* WellnessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessModels.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* WellnessPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessPersistence.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* WellnessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* WellnessNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessNotifications.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* WellnessSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessSettingsSheet.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* WaterPhysics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterPhysics.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* WaterMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterMotion.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* WaterBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterBackground.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* WaterScene.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WaterScene.metal; sourceTree = "<group>"; };
+		A2000000000000000000000A /* WaterThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = WaterThirdPartyNotices.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +156,16 @@
 				A1000000000000000000000A /* LibraryView.swift */,
 				A1000000000000000000000B /* EquipmentView.swift */,
 				A1000000000000000000000C /* RoutineEditorView.swift */,
+				A20000000000000000000001 /* WellnessModels.swift */,
+				A20000000000000000000002 /* WellnessPersistence.swift */,
+				A20000000000000000000003 /* WellnessStore.swift */,
+				A20000000000000000000004 /* WellnessNotifications.swift */,
+				A20000000000000000000005 /* WellnessSettingsSheet.swift */,
+				A20000000000000000000006 /* WaterPhysics.swift */,
+				A20000000000000000000007 /* WaterMotion.swift */,
+				A20000000000000000000008 /* WaterBackground.swift */,
+				A20000000000000000000009 /* WaterScene.metal */,
+				A2000000000000000000000A /* WaterThirdPartyNotices.txt */,
 				A1000000000000000000000D /* exercises.json */,
 			);
 			path = Native;
@@ -219,6 +249,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */,
 				A1000000000000000000001D /* exercises.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -270,6 +301,15 @@
 				AA0000000000000000000002 /* SceneDelegate.swift in Sources */,
 				AA0100000000000000000002 /* PrintPlugin.swift in Sources */,
 				AA0100000000000000000004 /* PrintPlugin.m in Sources */,
+				A21000000000000000000001 /* WellnessModels.swift in Sources */,
+				A21000000000000000000002 /* WellnessPersistence.swift in Sources */,
+				A21000000000000000000003 /* WellnessStore.swift in Sources */,
+				A21000000000000000000004 /* WellnessNotifications.swift in Sources */,
+				A21000000000000000000005 /* WellnessSettingsSheet.swift in Sources */,
+				A21000000000000000000006 /* WaterPhysics.swift in Sources */,
+				A21000000000000000000007 /* WaterMotion.swift in Sources */,
+				A21000000000000000000008 /* WaterBackground.swift in Sources */,
+				A21000000000000000000009 /* WaterScene.metal in Sources */,
 				A10000000000000000000011 /* RootView.swift in Sources */,
 				A10000000000000000000012 /* GymModels.swift in Sources */,
 				A10000000000000000000013 /* GymStore.swift in Sources */,

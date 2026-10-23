@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @State private var store = GymStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var store = store
@@ -25,5 +27,24 @@ struct RootView: View {
         }
         .environment(store)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            store.wellness.activate()
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                store.wellness.refreshTime()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            store.wellness.activate()
+        }
+        .alert("记录未保存", isPresented: Binding(
+            get: { store.wellness.errorMessage != nil },
+            set: { if !$0 { store.wellness.errorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { store.wellness.errorMessage = nil }
+        } message: {
+            Text(store.wellness.errorMessage ?? "")
+        }
     }
 }

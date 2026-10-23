@@ -7,6 +7,8 @@ struct BodyView: View {
     @State private var muscleDays = 7
     @State private var exerciseId = ""
     @State private var showWeighIn = false
+    @State private var showGoal = false
+    @State private var goalText = ""
 
     var body: some View {
         NavigationStack {
@@ -18,6 +20,12 @@ struct BodyView: View {
             }
             .navigationTitle("身体")
             .sheet(isPresented: $showWeighIn) { WeighInSheet() }
+            .alert("目标体重", isPresented: $showGoal) {
+                TextField("kg", text: $goalText).keyboardType(.decimalPad)
+                Button("保存") { if let value = parseKg(goalText) { store.setTarget(value) } }
+                if store.targetKg != nil { Button("清除目标", role: .destructive) { store.setTarget(nil) } }
+                Button("取消", role: .cancel) {}
+            }
             .onAppear(perform: pickExercise)
             .onChange(of: store.finishedWorkouts.count) { _, _ in pickExercise() }
         }
@@ -65,6 +73,10 @@ struct BodyView: View {
             }
             Button("记一笔") { showWeighIn = true }
                 .buttonStyle(.glassProminent)
+            Button(store.targetKg == nil ? "设目标体重" : "改目标体重") {
+                goalText = store.targetKg.map(formatKg) ?? ""
+                showGoal = true
+            }.buttonStyle(.glass)
             if !store.weighIns.isEmpty {
                 NavigationLink("全部称重") { WeighInList() }
             }
@@ -78,9 +90,9 @@ struct BodyView: View {
                 store.tab = .water
             } label: {
                 HStack {
-                    Label("这一周的喝水", systemImage: "drop")
+                    Label("饮水记录", systemImage: "drop")
                     Spacer()
-                    Text("还没开始记")
+                    Text("今日 \(store.wellness.todayWater) mL")
                         .foregroundStyle(.secondary)
                 }
             }

@@ -4,6 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class GymStore {
+    let wellness = WellnessStore()
     var routines: [Routine] = []
     var week: [DayPlan] = (1...7).map { DayPlan(day: $0, routineIds: []) }
     var workouts: [WorkoutSession] = []

@@ -1,0 +1,18 @@
+{
+  "scope": "Production Metal shader arithmetic translated to GLSL; NOT Metal compilation or iOS UI/runtime validation",
+  "renderer": "NVIDIA GeForce RTX 3060/PCIe/SSE2",
+  "opengl": "4.3.0 NVIDIA 610.88",
+  "cases": [
+    "0%",
+    "25%",
+    "50%",
+    "75%",
+    "100% / overflow",
+    "50% / tilt left",
+    "50% / tilt right",
+    "50% / dark"
+  ],
+  "metal_compiled": false,
+  "swiftui_rendered": false,
+  "device_motion_tested": false
+}

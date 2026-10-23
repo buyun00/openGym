@@ -62,6 +62,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to scan your gym membership QR code, and to take a photo or video of an exercise you add yourself.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>使用设备重力方向让首页水面自然倾斜，仅在首页可见时读取。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to record the sound of a video you take of an exercise you add yourself.</string>
 </dict>
