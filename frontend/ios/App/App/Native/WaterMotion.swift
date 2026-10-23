@@ -1,109 +1,149 @@
+import Combine
 import CoreMotion
-import Observation
+import OSLog
 import UIKit
 
 @MainActor
-@Observable
-final class WaterMotion: NSObject {
-    private(set) var level = 0.0
-    private(set) var tilt = 0.0
-    private(set) var swell = 0.0
-    private(set) var phase = 0.0
-    private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+final class WaterMotion: NSObject, ObservableObject {
+    // Publish one coherent snapshot per display frame. GeometryReader and the
+    // shader must both receive invalidations even when no sensor is available.
+    @Published private(set) var frame = WaterFrame()
 
-    @ObservationIgnored private let motion = CMMotionManager()
-    @ObservationIgnored private var displayLink: CADisplayLink?
-    @ObservationIgnored private var proxy: DisplayLinkProxy?
-    @ObservationIgnored private var previousTimestamp: CFTimeInterval = 0
-    @ObservationIgnored private var targetLevel = 0.0
-    @ObservationIgnored private var fillSpring = WaterSpring(response: 1.8, dampingRatio: 1)
-    @ObservationIgnored private var tiltSpring = WaterSpring(response: 1.55, dampingRatio: 0.43)
-    @ObservationIgnored private var swellSpring = WaterSpring(response: 1.1, dampingRatio: 0.32)
-    @ObservationIgnored private var isRunning = false
-    @ObservationIgnored private var initialized = false
+    private let motion = CMMotionManager()
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "openGym", category: "WaterMotion")
+    private var displayLink: CADisplayLink?
+    private var proxy: DisplayLinkProxy?
+    private var previousTimestamp: CFTimeInterval = 0
+    private var dynamics = WaterDynamics()
+    private var sample: WaterMotionSample?
+    private var sensorGeneration = 0
+    private var framesPerSecond = 30
 
     func setProgress(_ value: Double) {
-        let next = min(1, max(0, value.isFinite ? value : 0))
-        if !initialized || !isRunning {
-            fillSpring.value = next
-            fillSpring.velocity = 0
-            level = next
-            initialized = true
-        } else if next > targetLevel {
-            swellSpring.velocity += min(0.12, (next - targetLevel) * 0.45)
-        }
-        targetLevel = next
+        dynamics.setProgress(value, animated: displayLink != nil)
+        frame = dynamics.frame
     }
 
-    func configure(active: Bool, reduceMotion: Bool, reduceTransparency: Bool) {
-        lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-        let shouldRun = active && !reduceMotion && !reduceTransparency && !lowPower && ProcessInfo.processInfo.thermalState != .serious && ProcessInfo.processInfo.thermalState != .critical
-        guard shouldRun != isRunning else { return }
-        stop()
-        if shouldRun {
-            isRunning = true
-            motion.deviceMotionUpdateInterval = 1.0 / 30
-            if motion.isDeviceMotionAvailable { motion.startDeviceMotionUpdates() }
-            let proxy = DisplayLinkProxy(owner: self)
-            self.proxy = proxy
-            let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 30, preferred: 30)
-            link.add(to: .main, forMode: .common)
-            displayLink = link
-        } else {
-            fillSpring.value = targetLevel
-            fillSpring.velocity = 0
-            level = targetLevel
-            tiltSpring.value = 0
-            tiltSpring.velocity = 0
-            swellSpring.value = 0
-            swellSpring.velocity = 0
-            tilt = 0
-            swell = 0
-            phase = 0
+    func configure(active: Bool, reduceMotion: Bool) {
+        let thermal = ProcessInfo.processInfo.thermalState
+        let fps = WaterPlayback.framesPerSecond(active: active, reduceMotion: reduceMotion,
+                                                lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                                                thermallyLimited: thermal == .serious, critical: thermal == .critical)
+        guard fps > 0 else {
+            stop()
+            dynamics.settle()
+            frame = dynamics.frame
+            return
         }
+        framesPerSecond = fps
+        motion.deviceMotionUpdateInterval = 1 / Double(fps)
+        motion.accelerometerUpdateInterval = 1 / Double(fps)
+        let rate = Float(fps)
+        if let displayLink {
+            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
+            return
+        }
+
+        previousTimestamp = 0
+        let proxy = DisplayLinkProxy(owner: self)
+        self.proxy = proxy
+        let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
+        displayLink = link
+        link.add(to: .main, forMode: .common)
+        logger.info("Water display clock started at \(fps) fps")
+        startSensors()
     }
 
     func stop() {
         displayLink?.invalidate()
         displayLink = nil
         proxy = nil
+        sensorGeneration &+= 1
         motion.stopDeviceMotionUpdates()
+        motion.stopAccelerometerUpdates()
+        sample = nil
         previousTimestamp = 0
-        isRunning = false
+    }
+
+    private func startSensors() {
+        let generation = sensorGeneration
+        guard motion.isDeviceMotionAvailable else {
+            startAccelerometer(generation: generation)
+            return
+        }
+        motion.startDeviceMotionUpdates(to: .main) { [weak self] data, error in
+            let next = data.map {
+                WaterMotionSample(gravityX: $0.gravity.x, gravityY: $0.gravity.y,
+                                  accelerationX: $0.userAcceleration.x, accelerationY: $0.userAcceleration.y)
+            }
+            let message = error?.localizedDescription
+            Task { @MainActor [weak self] in
+                guard let self, self.displayLink != nil, self.sensorGeneration == generation else { return }
+                if let next {
+                    if self.sample == nil { self.logger.info("Water received its first device-motion sample") }
+                    self.sample = next
+                } else if let message {
+                    self.logger.error("Water device-motion error: \(message, privacy: .public)")
+                    self.motion.stopDeviceMotionUpdates()
+                    self.startAccelerometer(generation: generation)
+                }
+            }
+        }
+    }
+
+    private func startAccelerometer(generation: Int) {
+        guard generation == sensorGeneration, displayLink != nil else { return }
+        guard motion.isAccelerometerAvailable else {
+            logger.info("Water has no motion stream; the display clock keeps natural ripples moving")
+            return
+        }
+        guard !motion.isAccelerometerActive else { return }
+        // Discard fused-motion callbacks already queued before switching streams.
+        sensorGeneration &+= 1
+        let fallbackGeneration = sensorGeneration
+        sample = nil
+        motion.startAccelerometerUpdates(to: .main) { [weak self] data, error in
+            let x = data?.acceleration.x
+            let y = data?.acceleration.y
+            let message = error?.localizedDescription
+            Task { @MainActor [weak self] in
+                guard let self, self.displayLink != nil, self.sensorGeneration == fallbackGeneration else { return }
+                if let x, let y {
+                    // Separate slow gravity from the faster shake signal on devices
+                    // where fused device motion is unavailable.
+                    let gravityX = self.sample.map { $0.gravityX + (x - $0.gravityX) * 0.12 } ?? x
+                    let gravityY = self.sample.map { $0.gravityY + (y - $0.gravityY) * 0.12 } ?? y
+                    if self.sample == nil { self.logger.info("Water received its first accelerometer sample") }
+                    self.sample = WaterMotionSample(gravityX: gravityX, gravityY: gravityY,
+                                                    accelerationX: x - gravityX, accelerationY: y - gravityY)
+                } else if let message {
+                    self.logger.error("Water accelerometer error: \(message, privacy: .public)")
+                    self.motion.stopAccelerometerUpdates()
+                    self.sample = nil
+                }
+            }
+        }
     }
 
     fileprivate func tick(_ link: CADisplayLink) {
-        let dt = previousTimestamp == 0 ? 1.0 / 30 : min(0.1, link.timestamp - previousTimestamp)
+        guard let displayLink, displayLink === link else { return }
+        if previousTimestamp == 0 { logger.info("Water display clock delivered its first frame") }
+        let dt = previousTimestamp == 0 ? 1 / Double(framesPerSecond) : link.timestamp - previousTimestamp
         previousTimestamp = link.timestamp
-        var slope = 0.0
-        var acceleration = 0.0
-        if let data = motion.deviceMotion {
-            let orientation = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-                .first(where: { $0.activationState == .foregroundActive })?.interfaceOrientation ?? .portrait
-            let gravity = screenVector(x: data.gravity.x, y: data.gravity.y, orientation: orientation)
-            let force = screenVector(x: data.userAcceleration.x, y: data.userAcceleration.y, orientation: orientation)
-            // When lying flat, there is no reliable in-plane gravity. Ease back to a level surface.
-            if gravity.y > 0.15 { slope = max(-1.6, min(1.6, -gravity.x / gravity.y)) }
-            acceleration = max(-1, min(1, force.x))
-        }
-        fillSpring.advance(to: targetLevel, dt: dt)
-        tiltSpring.advance(to: slope, dt: dt)
-        swellSpring.advance(to: -acceleration * 0.035, dt: dt)
-        level = min(1, max(0, fillSpring.value))
-        tilt = max(-2, min(2, tiltSpring.value))
-        swell = max(-0.07, min(0.07, swellSpring.value))
-        phase += dt
-        // All temporal frequencies in the shader repeat after 20π seconds.
-        if phase > 20 * .pi { phase -= 20 * .pi }
+        let input = sample?.projected(for: screenOrientation) ?? (slope: 0, acceleration: 0)
+        dynamics.advance(dt: dt, slope: input.slope, acceleration: input.acceleration)
+        frame = dynamics.frame
     }
 
-    private func screenVector(x: Double, y: Double, orientation: UIInterfaceOrientation) -> (x: Double, y: Double) {
+    private var screenOrientation: WaterScreenOrientation {
+        let orientation = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })?.interfaceOrientation ?? .portrait
         switch orientation {
-        case .landscapeLeft: return (y, x)
-        case .landscapeRight: return (-y, -x)
-        case .portraitUpsideDown: return (-x, y)
-        default: return (x, -y)
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        case .portraitUpsideDown: return .portraitUpsideDown
+        default: return .portrait
         }
     }
 }
@@ -112,5 +152,7 @@ final class WaterMotion: NSObject {
 private final class DisplayLinkProxy: NSObject {
     weak var owner: WaterMotion?
     init(owner: WaterMotion) { self.owner = owner }
-    @objc func tick(_ link: CADisplayLink) { owner?.tick(link) }
+    @objc func tick(_ link: CADisplayLink) {
+        if let owner { owner.tick(link) } else { link.invalidate() }
+    }
 }

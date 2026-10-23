@@ -17,7 +17,7 @@ IOS = ROOT / "frontend/ios"
 NATIVE = IOS / "App/App/Native"
 parser = tree_sitter.Parser(tree_sitter.Language(tree_sitter_swift.language()))
 errors = []
-files = sorted(NATIVE.glob("*.swift")) + sorted((IOS / "Tests").rglob("*.swift")) + [IOS / "Package.swift"]
+files = sorted(NATIVE.glob("*.swift")) + sorted((IOS / "Tests").rglob("*.swift")) + [IOS / "Package.swift", IOS / "App/App/SceneDelegate.swift"]
 for file in files:
     data = file.read_bytes()
     tree = parser.parse(data)
@@ -41,6 +41,10 @@ missing = [p.name for p in NATIVE.iterdir() if p.suffix in [".swift", ".metal"] 
 plist = plistlib.loads((IOS / "App/App/Info.plist").read_bytes())
 today = (NATIVE / "TodayView.swift").read_text("utf8").split("struct WeighInSheet")[0]
 root = (NATIVE / "RootView.swift").read_text("utf8")
+scene = (IOS / "App/App/SceneDelegate.swift").read_text("utf8")
+motion = (NATIVE / "WaterMotion.swift").read_text("utf8")
+background = (NATIVE / "WaterBackground.swift").read_text("utf8")
+tab_order = re.findall(r'Tab\("[^"]+", systemImage: "[^"]+", value: AppTab\.(\w+)\)', root)
 checks = {
     "swift_syntax": not errors,
     "project_object_identifiers": all(len(key) == 24 for key in objects),
@@ -49,6 +53,11 @@ checks = {
     "license_in_resources": "WaterThirdPartyNotices.txt" in resources,
     "motion_usage_description": bool(plist.get("NSMotionUsageDescription")),
     "system_tab_view": "TabView(selection:" in root and len(re.findall(r'\bTab\(', root)) == 5,
+    "native_plus_first": tab_order == ["workout", "today", "plan", "body", "water"] and 'systemImage: "plus"' in root,
+    "custom_center_button_removed": "NativeTabBarAnchor" not in root and "NativeTabBarAnchor.swift" not in sources and not (NATIVE / "NativeTabBarAnchor.swift").exists(),
+    "scene_lifecycle_source_wiring": all(token in scene for token in [r'.environment(\.scenePhase, lifecycle.phase)', "sceneDidBecomeActive", "sceneWillResignActive", "sceneDidEnterBackground"]),
+    "published_water_frame_source_wiring": "@Published private(set) var frame" in motion and "@StateObject private var motion" in background and background.index("let frame = motion.frame") < background.index("GeometryReader" + " {"),
+    "sensor_callback_source_wiring": "startDeviceMotionUpdates(to: .main)" in motion and "sensorGeneration == generation" in motion,
     "home_scope": all(token not in today for token in ["weekStrip", "DatePicker", "showWeighIn", "store.openToday", "store.startToday"]),
     "no_webview_home": all(token not in today for token in ["WKWebView", "UIViewRepresentable", "HTML"]),
     "separate_persistence": 'wellness-state.json' in (NATIVE / 'WellnessStore.swift').read_text('utf8')

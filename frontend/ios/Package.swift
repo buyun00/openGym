@@ -11,7 +11,7 @@ let package = Package(
                 exclude: ["RootView.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift",
                           "PlanView.swift", "WorkoutView.swift", "BodyView.swift", "WaterView.swift", "LibraryView.swift",
                           "EquipmentView.swift", "RoutineEditorView.swift", "exercises.json", "WaterMotion.swift",
-                          "WaterBackground.swift", "WaterScene.metal", "NativeTabBarAnchor.swift", "WellnessNotifications.swift", "WellnessStore.swift",
+                          "WaterBackground.swift", "WaterScene.metal", "WellnessNotifications.swift", "WellnessStore.swift",
                           "WellnessSettingsSheet.swift", "WaterThirdPartyNotices.txt"],
                 sources: ["WellnessModels.swift", "WellnessPersistence.swift", "WaterPhysics.swift"]),
         .testTarget(name: "WellnessCoreTests", dependencies: ["WellnessCore"], path: "Tests/WellnessCoreTests")

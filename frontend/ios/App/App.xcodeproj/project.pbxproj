@@ -39,7 +39,6 @@
 		A21000000000000000000006 /* WaterPhysics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* WaterPhysics.swift */; };
 		A21000000000000000000007 /* WaterMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* WaterMotion.swift */; };
 		A21000000000000000000008 /* WaterBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* WaterBackground.swift */; };
-		A2100000000000000000000B /* NativeTabBarAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* NativeTabBarAnchor.swift */; };
 		A21000000000000000000009 /* WaterScene.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* WaterScene.metal */; };
 		A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* WaterThirdPartyNotices.txt */; };
 /* End PBXBuildFile section */
@@ -81,7 +80,6 @@
 		A20000000000000000000006 /* WaterPhysics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterPhysics.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* WaterMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterMotion.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* WaterBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterBackground.swift; sourceTree = "<group>"; };
-		A2000000000000000000000B /* NativeTabBarAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarAnchor.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* WaterScene.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WaterScene.metal; sourceTree = "<group>"; };
 		A2000000000000000000000A /* WaterThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = WaterThirdPartyNotices.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -166,7 +164,6 @@
 				A20000000000000000000006 /* WaterPhysics.swift */,
 				A20000000000000000000007 /* WaterMotion.swift */,
 				A20000000000000000000008 /* WaterBackground.swift */,
-				A2000000000000000000000B /* NativeTabBarAnchor.swift */,
 				A20000000000000000000009 /* WaterScene.metal */,
 				A2000000000000000000000A /* WaterThirdPartyNotices.txt */,
 				A1000000000000000000000D /* exercises.json */,
@@ -312,7 +309,6 @@
 				A21000000000000000000006 /* WaterPhysics.swift in Sources */,
 				A21000000000000000000007 /* WaterMotion.swift in Sources */,
 				A21000000000000000000008 /* WaterBackground.swift in Sources */,
-				A2100000000000000000000B /* NativeTabBarAnchor.swift in Sources */,
 				A21000000000000000000009 /* WaterScene.metal in Sources */,
 				A10000000000000000000011 /* RootView.swift in Sources */,
 				A10000000000000000000012 /* GymModels.swift in Sources */,

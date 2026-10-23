@@ -8,23 +8,28 @@ struct WaterBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @State private var motion = WaterMotion()
+    @StateObject private var motion = WaterMotion()
 
     var body: some View {
+        // Read the published frame in body, before GeometryReader's escaping
+        // content closure, to explicitly invalidate the shader every frame.
+        let frame = motion.frame
         GeometryReader { geometry in
-            let surface = WaterSurface(fill: motion.level, slope: motion.tilt * geometry.size.width / max(1, geometry.size.height),
-                                       swell: motion.swell, ripple: reduceMotion || motion.lowPower || reduceTransparency ? 0 : 0.0025,
-                                       phase: motion.phase)
+            let surface = WaterSurface(fill: frame.level, slope: frame.tilt * geometry.size.width / max(1, geometry.size.height),
+                                       swell: frame.swell, ripple: reduceMotion || reduceTransparency ? 0 : 0.0025,
+                                       phase: frame.phase)
             if reduceTransparency {
-                Color(uiColor: .systemBackground)
-                    .overlay(alignment: .bottom) {
-                        Color.cyan.opacity(colorScheme == .dark ? 0.18 : 0.12)
-                            .frame(height: geometry.size.height * min(1, max(0, progress)))
-                    }
+                ZStack {
+                    Color(uiColor: .systemBackground)
+                    SolidWaterShape(surface: surface)
+                        .fill(colorScheme == .dark ? Color(red: 0.04, green: 0.15, blue: 0.22)
+                              : Color(red: 0.84, green: 0.95, blue: 0.98))
+                }
+                .clipped()
             } else {
                 Rectangle().fill(.white)
                     .colorEffect(ShaderLibrary.opengymWater(
-                        .float2(Float(geometry.size.width), Float(geometry.size.height)), .float(Float(motion.phase)),
+                        .float2(Float(geometry.size.width), Float(geometry.size.height)), .float(Float(frame.phase)),
                         .float(Float(surface.base)), .float(Float(surface.slope)),
                         .float(Float(surface.swell)), .float(Float(surface.ripple)),
                         .float(colorScheme == .dark ? 1 : 0)))
@@ -45,7 +50,27 @@ struct WaterBackground: View {
     }
 
     private func configure() {
-        motion.configure(active: active && scenePhase == .active, reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
+        motion.configure(active: active && scenePhase == .active, reduceMotion: reduceMotion)
+    }
+}
+
+// Reducing transparency changes the material, not the gravity response.
+private struct SolidWaterShape: Shape {
+    var surface: WaterSurface
+
+    func path(in rect: CGRect) -> Path {
+        let base = surface.base
+        var path = Path()
+        for index in 0...96 {
+            let x = Double(index) / 96
+            let point = CGPoint(x: rect.minX + x * rect.width,
+                                y: rect.minY + (base + surface.displacement(at: x)) * rect.height)
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
