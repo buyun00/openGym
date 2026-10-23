@@ -17,6 +17,8 @@ final class GymStore {
     var ownedEquipment: [String] = []
     var tab: AppTab = .today
     var restEndsAt: Date?
+    var workoutPreferences = WorkoutPreferences()
+    private let workoutAlerts = WorkoutRestAlerts()
 
     private struct Snapshot: Codable {
         var routines: [Routine] = []
@@ -28,9 +30,14 @@ final class GymStore {
         var targetKg: Double?
         var restSeconds: Int = 90
         var ownedEquipment: [String] = []
+        var workoutPreferences: WorkoutPreferences?
     }
 
-    init() { load() }
+    init() { load(); refreshWorkoutAlerts() }
+
+    func refreshWorkoutAlerts() {
+        workoutAlerts.update(end: restEndsAt, preferences: workoutPreferences) { [weak self] in self?.clearRest() }
+    }
 
     var todayIndex: Int { Weekday.index(for: Date()) }
     var todayRoutines: [Routine] { routines(on: todayIndex) }
@@ -149,31 +156,22 @@ final class GymStore {
             tab = .plan
             return
         }
-        var exercises: [WorkoutExercise] = []
-        for routine in blocks {
-            for slot in routine.exercises {
-                let last = lastPerformed(slot.exerciseId)
-                let count = max(1, slot.setCount)
-                let reps = max(1, last?.reps ?? slot.reps)
-                let weight = last?.weight ?? 0
-                let sets = (0..<count).map { _ in
-                    WorkoutSet(id: UUID(), weight: weight, reps: reps, done: false)
-                }
-                exercises.append(WorkoutExercise(id: UUID(), exerciseId: slot.exerciseId, name: slot.name, sets: sets))
-            }
-        }
+        let exercises = blocks.flatMap { workoutExercises(from: $0) }
         let name = blocks.count == 1 ? blocks[0].name : blocks.map(\.name).joined(separator: "、")
         active = WorkoutSession(id: UUID(), name: name, startedAt: Date(), finishedAt: nil, exercises: exercises)
+        active?.selectedExerciseId = exercises.first?.id
         tab = .workout
-        save()
+        if !save() { active = nil }
     }
 
     func toggleSet(exercise exerciseId: UUID, set setId: UUID) {
-        guard var session = active,
+        mutateActive { session in
+        guard
               let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }),
               let si = session.exercises[ei].sets.firstIndex(where: { $0.id == setId }) else { return }
         let turningOn = !session.exercises[ei].sets[si].done
         session.exercises[ei].sets[si].done = turningOn
+        session.exercises[ei].sets[si].completedAt = turningOn ? Date() : nil
         if turningOn {
             let current = session.exercises[ei].sets[si]
             if let next = session.exercises[ei].sets.indices.first(where: { $0 > si && !session.exercises[ei].sets[$0].done }),
@@ -181,25 +179,34 @@ final class GymStore {
                 session.exercises[ei].sets[next].weight = current.weight
                 session.exercises[ei].sets[next].reps = current.reps
             }
-            restEndsAt = Date().addingTimeInterval(TimeInterval(max(15, restSeconds)))
+            let seconds = session.exercises[ei].restSeconds ?? restSeconds
+            session.restEndsAt = seconds > 0 ? Date().addingTimeInterval(TimeInterval(seconds)) : nil
+            session.restOwner = seconds > 0 ? exerciseId : nil
+            session.restSetOwner = seconds > 0 ? setId : nil
+        } else if session.restSetOwner == setId || (session.restSetOwner == nil && session.restOwner == exerciseId) {
+            session.restEndsAt = nil
+            session.restOwner = nil
+            session.restSetOwner = nil
         }
-        active = session
-        save()
+        }
     }
 
     func addSet(exercise exerciseId: UUID) {
-        guard var session = active, let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
+        mutateActive { session in
+        guard let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         let last = session.exercises[ei].sets.last
-        session.exercises[ei].sets.append(WorkoutSet(id: UUID(), weight: last?.weight ?? 0, reps: last?.reps ?? 8, done: false))
-        active = session
-        save()
+        session.exercises[ei].sets.append(WorkoutLogic.seed(mode: session.exercises[ei].mode ?? .reps, previous: last))
+        }
     }
 
     func deleteSet(exercise exerciseId: UUID, set setId: UUID) {
-        guard var session = active, let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
+        mutateActive { session in
+        guard let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         session.exercises[ei].sets.removeAll { $0.id == setId }
-        active = session
-        save()
+        if session.restSetOwner == setId {
+            session.restEndsAt = nil; session.restOwner = nil; session.restSetOwner = nil
+        }
+        }
     }
 
     func setWeight(exercise exerciseId: UUID, set setId: UUID, weight: Double) {
@@ -211,22 +218,22 @@ final class GymStore {
     }
 
     func finishActive() {
-        guard var session = active else { return }
-        session.finishedAt = Date()
-        workouts.append(session)
+        guard let session = active else { return }
+        let previousWorkouts = workouts
+        workouts.append(WorkoutLogic.finished(session, at: Date()))
         active = nil
-        restEndsAt = nil
-        tab = .today
-        save()
+        if save() { restEndsAt = nil; refreshWorkoutAlerts(); tab = .today }
+        else { workouts = previousWorkouts; active = session }
     }
 
     func discardActive() {
+        let previous = active
         active = nil
-        restEndsAt = nil
-        save()
+        if save() { restEndsAt = nil; refreshWorkoutAlerts(); tab = .today }
+        else { active = previous }
     }
 
-    func clearRest() { restEndsAt = nil }
+    func clearRest() { mutateActive { $0.restEndsAt = nil; $0.restOwner = nil; $0.restSetOwner = nil } }
 
     func deleteWorkout(_ id: UUID) {
         let previous = workouts
@@ -267,7 +274,10 @@ final class GymStore {
 
     func addExercise(_ info: ExerciseInfo, to routineId: UUID) {
         guard let index = routines.firstIndex(where: { $0.id == routineId }) else { return }
-        routines[index].exercises.append(RoutineExercise(id: UUID(), exerciseId: info.id, name: info.name, setCount: 3, reps: 8))
+        let mode = info.workoutMode
+        routines[index].exercises.append(RoutineExercise(id: UUID(), exerciseId: info.id, name: info.name,
+            setCount: mode == .cardio ? 1 : 3, reps: 8, mode: mode,
+            minutes: mode == .cardio ? 20 : nil, speed: mode == .cardio ? 8 : nil))
         save()
     }
 
@@ -353,8 +363,9 @@ final class GymStore {
     }
 
     func setRest(_ seconds: Int) {
-        restSeconds = min(300, max(15, seconds))
-        save()
+        let previous = restSeconds
+        restSeconds = min(3600, max(0, seconds))
+        if !save() { restSeconds = previous }
     }
 
     func setOwned(_ id: String, _ owned: Bool) {
@@ -456,13 +467,13 @@ final class GymStore {
         return nil
     }
 
-    private func updateSet(exercise exerciseId: UUID, set setId: UUID, _ change: (inout WorkoutSet) -> Void) {
-        guard var session = active,
+    func updateSet(exercise exerciseId: UUID, set setId: UUID, _ change: (inout WorkoutSet) -> Void) {
+        mutateActive { session in
+        guard
               let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }),
               let si = session.exercises[ei].sets.firstIndex(where: { $0.id == setId }) else { return }
         change(&session.exercises[ei].sets[si])
-        active = session
-        save()
+        }
     }
 
     private var fileURL: URL {
@@ -485,13 +496,15 @@ final class GymStore {
         weighIns = snapshot.weighIns
         bodyMeasurements = snapshot.bodyMeasurements ?? []
         targetKg = snapshot.targetKg
-        restSeconds = min(300, max(15, snapshot.restSeconds))
+        restSeconds = min(3600, max(0, snapshot.restSeconds))
+        restEndsAt = active?.restEndsAt
+        workoutPreferences = snapshot.workoutPreferences ?? WorkoutPreferences()
         ownedEquipment = snapshot.ownedEquipment
         normalizeWeek()
     }
 
     @discardableResult
-    private func save() -> Bool {
+    func save() -> Bool {
         normalizeWeek()
         let snapshot = Snapshot(
             routines: routines,
@@ -502,7 +515,8 @@ final class GymStore {
             bodyMeasurements: bodyMeasurements,
             targetKg: targetKg,
             restSeconds: restSeconds,
-            ownedEquipment: ownedEquipment
+            ownedEquipment: ownedEquipment,
+            workoutPreferences: workoutPreferences
         )
         do {
             let data = try JSONEncoder().encode(snapshot)

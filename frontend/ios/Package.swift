@@ -8,7 +8,7 @@ let package = Package(
     products: [],
     targets: [
         .target(name: "WellnessCore", path: "App/App/Native",
-                exclude: ["RootView.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift",
+                exclude: ["WorkoutLogic.swift", "WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift",
                           "PlanView.swift", "WorkoutView.swift", "BodyView.swift", "WaterView.swift", "LibraryView.swift",
                           "EquipmentView.swift", "RoutineEditorView.swift", "exercises.json", "WaterMotion.swift",
                           "WaterBackground.swift", "WaterScene.metal", "NativeTabBarAnchor.swift", "WellnessNotifications.swift", "WellnessStore.swift",
@@ -17,13 +17,14 @@ let package = Package(
                 sources: ["WellnessModels.swift", "WellnessPersistence.swift", "WaterPhysics.swift"]),
         .testTarget(name: "WellnessCoreTests", dependencies: ["WellnessCore"], path: "Tests/WellnessCoreTests"),
         .target(name: "BodyCore", path: "App/App/Native",
-                exclude: ["RootView.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift", "PlanView.swift",
+                exclude: ["WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift", "PlanView.swift",
                           "WorkoutView.swift", "BodyView.swift", "WaterView.swift", "LibraryView.swift", "EquipmentView.swift",
                           "RoutineEditorView.swift", "exercises.json", "WaterMotion.swift", "WaterBackground.swift", "WaterScene.metal",
                           "NativeTabBarAnchor.swift", "WellnessModels.swift", "WellnessPersistence.swift", "WaterPhysics.swift",
                           "WellnessNotifications.swift", "WellnessStore.swift", "WellnessSettingsSheet.swift", "WaterThirdPartyNotices.txt",
                           "BodyCalendarView.swift", "BodyEntrySheet.swift", "BodyMuscleMap.swift", "BodyRecordsSection.swift", "BodyMapNotices.txt"],
-                sources: ["GymModels.swift", "BodyAnalytics.swift"]),
-        .testTarget(name: "BodyCoreTests", dependencies: ["BodyCore"], path: "Tests/BodyCoreTests")
+                sources: ["GymModels.swift", "BodyAnalytics.swift", "WorkoutLogic.swift"]),
+        .testTarget(name: "BodyCoreTests", dependencies: ["BodyCore"], path: "Tests/BodyCoreTests"),
+        .testTarget(name: "WorkoutCoreTests", dependencies: ["BodyCore"], path: "Tests/WorkoutCoreTests")
     ]
 )

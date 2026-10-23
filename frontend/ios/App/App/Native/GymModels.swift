@@ -10,6 +10,12 @@ struct RoutineExercise: Codable, Identifiable, Hashable {
     var name: String
     var setCount: Int
     var reps: Int
+    var mode: WorkoutMode? = nil
+    var minutes: Double? = nil
+    var speed: Double? = nil
+    var incline: Double? = nil
+    var seconds: Double? = nil
+    var note: String? = nil
 }
 
 struct Routine: Codable, Identifiable, Hashable {
@@ -25,6 +31,11 @@ struct WorkoutSet: Codable, Identifiable, Hashable {
     var done: Bool
     // Nil means unrecorded, never zero effort. Optional for older gym-state.json files.
     var rir: Int? = nil
+    var minutes: Double? = nil
+    var speed: Double? = nil
+    var incline: Double? = nil
+    var seconds: Double? = nil
+    var completedAt: Date? = nil
 }
 
 struct WorkoutExercise: Codable, Identifiable, Hashable {
@@ -32,6 +43,12 @@ struct WorkoutExercise: Codable, Identifiable, Hashable {
     var exerciseId: String
     var name: String
     var sets: [WorkoutSet]
+    var mode: WorkoutMode? = nil
+    var note: String? = nil
+    var notePinned: Bool? = nil
+    var noProgression: Bool? = nil
+    var restSeconds: Int? = nil
+    var routineId: UUID? = nil
 }
 
 struct WorkoutSession: Codable, Identifiable, Hashable {
@@ -40,6 +57,23 @@ struct WorkoutSession: Codable, Identifiable, Hashable {
     var startedAt: Date
     var finishedAt: Date?
     var exercises: [WorkoutExercise]
+    var note: String? = nil
+    var layout: WorkoutLayout? = nil
+    var selectedExerciseId: UUID? = nil
+    var noProgression: Bool? = nil
+    var restEndsAt: Date? = nil
+    var restOwner: UUID? = nil
+    var restSetOwner: UUID? = nil
+}
+
+enum WorkoutMode: String, Codable, CaseIterable {
+    case reps, time, cardio
+    var title: String { switch self { case .reps: return "力量"; case .time: return "计时"; case .cardio: return "有氧" } }
+}
+
+enum WorkoutLayout: String, Codable, CaseIterable {
+    case cards, list, compact
+    var title: String { switch self { case .cards: return "卡片"; case .list: return "列表"; case .compact: return "紧凑" } }
 }
 
 struct WeighIn: Codable, Identifiable, Hashable {

@@ -48,6 +48,16 @@
 		A31000000000000000000004 /* BodyMuscleMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000004 /* BodyMuscleMap.swift */; };
 		A31000000000000000000005 /* BodyRecordsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000005 /* BodyRecordsSection.swift */; };
 		A31000000000000000000006 /* BodyMapNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000006 /* BodyMapNotices.txt */; };
+		A41000000000000000000001 /* WorkoutLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000001 /* WorkoutLogic.swift */; };
+		A41000000000000000000002 /* WorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000002 /* WorkoutStore.swift */; };
+		A41000000000000000000003 /* WorkoutCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000003 /* WorkoutCatalogue.swift */; };
+		A41000000000000000000004 /* WorkoutSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000004 /* WorkoutSheets.swift */; };
+		A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000005 /* WorkoutExerciseCard.swift */; };
+		A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000006 /* WorkoutExerciseOptions.swift */; };
+		A41000000000000000000007 /* WorkoutMediaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000007 /* WorkoutMediaView.swift */; };
+		A41000000000000000000008 /* WorkoutRestAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000008 /* WorkoutRestAlerts.swift */; };
+		A41000000000000000000009 /* workout-catalogue.json in Resources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000009 /* workout-catalogue.json */; };
+		A4100000000000000000000A /* media in Resources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000A /* media */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -96,6 +106,16 @@
 		A30000000000000000000004 /* BodyMuscleMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyMuscleMap.swift; sourceTree = "<group>"; };
 		A30000000000000000000005 /* BodyRecordsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyRecordsSection.swift; sourceTree = "<group>"; };
 		A30000000000000000000006 /* BodyMapNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BodyMapNotices.txt; sourceTree = "<group>"; };
+		A40000000000000000000001 /* WorkoutLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLogic.swift; sourceTree = "<group>"; };
+		A40000000000000000000002 /* WorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStore.swift; sourceTree = "<group>"; };
+		A40000000000000000000003 /* WorkoutCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutCatalogue.swift; sourceTree = "<group>"; };
+		A40000000000000000000004 /* WorkoutSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSheets.swift; sourceTree = "<group>"; };
+		A40000000000000000000005 /* WorkoutExerciseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseCard.swift; sourceTree = "<group>"; };
+		A40000000000000000000006 /* WorkoutExerciseOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseOptions.swift; sourceTree = "<group>"; };
+		A40000000000000000000007 /* WorkoutMediaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutMediaView.swift; sourceTree = "<group>"; };
+		A40000000000000000000008 /* WorkoutRestAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRestAlerts.swift; sourceTree = "<group>"; };
+		A40000000000000000000009 /* workout-catalogue.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = workout-catalogue.json; sourceTree = "<group>"; };
+		A4000000000000000000000A /* media */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "../../../catalogue/media"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +208,16 @@
 				A20000000000000000000009 /* WaterScene.metal */,
 				A2000000000000000000000A /* WaterThirdPartyNotices.txt */,
 				A1000000000000000000000D /* exercises.json */,
+				A4000000000000000000000A /* media */,
+				A40000000000000000000009 /* workout-catalogue.json */,
+				A40000000000000000000008 /* WorkoutRestAlerts.swift */,
+				A40000000000000000000007 /* WorkoutMediaView.swift */,
+				A40000000000000000000006 /* WorkoutExerciseOptions.swift */,
+				A40000000000000000000005 /* WorkoutExerciseCard.swift */,
+				A40000000000000000000004 /* WorkoutSheets.swift */,
+				A40000000000000000000003 /* WorkoutCatalogue.swift */,
+				A40000000000000000000002 /* WorkoutStore.swift */,
+				A40000000000000000000001 /* WorkoutLogic.swift */,
 			);
 			path = Native;
 			sourceTree = "<group>";
@@ -272,6 +302,8 @@
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */,
 				A1000000000000000000001D /* exercises.json in Resources */,
+				A4100000000000000000000A /* media in Resources */,
+				A41000000000000000000009 /* workout-catalogue.json in Resources */,
 				A31000000000000000000006 /* BodyMapNotices.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -331,6 +363,14 @@
 				A21000000000000000000006 /* WaterPhysics.swift in Sources */,
 				A21000000000000000000007 /* WaterMotion.swift in Sources */,
 				A21000000000000000000008 /* WaterBackground.swift in Sources */,
+				A41000000000000000000008 /* WorkoutRestAlerts.swift in Sources */,
+				A41000000000000000000007 /* WorkoutMediaView.swift in Sources */,
+				A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */,
+				A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */,
+				A41000000000000000000004 /* WorkoutSheets.swift in Sources */,
+				A41000000000000000000003 /* WorkoutCatalogue.swift in Sources */,
+				A41000000000000000000002 /* WorkoutStore.swift in Sources */,
+				A41000000000000000000001 /* WorkoutLogic.swift in Sources */,
 				A2100000000000000000000B /* NativeTabBarAnchor.swift in Sources */,
 				A21000000000000000000009 /* WaterScene.metal in Sources */,
 				A10000000000000000000011 /* RootView.swift in Sources */,

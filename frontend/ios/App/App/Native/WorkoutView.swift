@@ -1,212 +1,245 @@
 import SwiftUI
+import UIKit
 
 struct WorkoutView: View {
     @Environment(GymStore.self) private var store
-    @State private var showFinish = false
-    @State private var showDiscard = false
+    @State private var presenting = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.active != nil {
-                    activeList
+            List {
+                if let session = store.active {
+                    Section {
+                        Button { presenting = true } label: { Label("继续：\(session.name)", systemImage: "play.fill") }
+                        Text("已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组").foregroundStyle(.secondary)
+                    }
                 } else {
-                    idleList
-                }
-            }
-            .navigationTitle(store.active?.name ?? "开始")
-            .navigationSubtitle(store.active == nil ? "选一个计划" : "\(store.activeDoneCount) / \(store.activeSetCount) 组")
-            .toolbar {
-                if store.active != nil {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu("更多", systemImage: "ellipsis.circle") {
-                            Button("结束并保存") { showFinish = true }
-                            Button("放弃这次训练", role: .destructive) { showDiscard = true }
+                    if !store.todayRoutines.isEmpty {
+                        Section("今天的计划") {
+                            ForEach(store.todayRoutines) { routine in
+                                Button { store.start([routine]) } label: { routineLabel(routine) }
+                            }
+                            if store.todayRoutines.count > 1 {
+                                Button("开始今天的全部训练", systemImage: "play.fill") { store.startToday() }
+                            }
                         }
+                    }
+                    Section("其他训练日") {
+                        ForEach(store.routines.filter { routine in !store.todayRoutines.contains(where: { $0.id == routine.id }) }) { routine in
+                            Button { store.start([routine]) } label: { routineLabel(routine) }
+                        }
+                        if store.routines.isEmpty {
+                            ContentUnavailableView("还没有计划", systemImage: "calendar", description: Text("可以先去计划页安排，或从自由训练开始。"))
+                        }
+                    }
+                    Section {
+                        Button("自由训练，边练边加动作", systemImage: "plus") { store.startFreestyle() }
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) { bottomBar }
-            .alert("记录未保存", isPresented: Binding(
-                get: { store.saveError != nil },
-                set: { if !$0 { store.saveError = nil } }
-            )) {
-                Button("好") { store.saveError = nil }
-            } message: { Text(store.saveError ?? "") }
-            .confirmationDialog("结束并保存这次训练？", isPresented: $showFinish, titleVisibility: .visible) {
-                Button("保存") { store.finishActive() }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组。")
-            }
-            .confirmationDialog("放弃这次训练？", isPresented: $showDiscard, titleVisibility: .visible) {
-                Button("放弃", role: .destructive) { store.discardActive() }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("这次的组数不会记下来。")
-            }
+            .navigationTitle("开始锻炼")
         }
-    }
-
-    private var idleList: some View {
-        List {
-            Section("今天") {
-                if store.todayRoutines.isEmpty {
-                    Text("今天没有安排")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.todayRoutines) { routine in
-                        Button {
-                            store.start([routine])
-                        } label: {
-                            routineLabel(routine)
-                        }
-                    }
-                }
-            }
-            Section("全部计划") {
-                if store.routines.isEmpty {
-                    ContentUnavailableView("还没有计划", systemImage: "calendar", description: Text("先到计划页建一个，再回来开始。"))
-                }
-                ForEach(store.routines) { routine in
-                    Button {
-                        store.start([routine])
-                    } label: {
-                        routineLabel(routine)
-                    }
-                }
-            }
-        }
-    }
-
-    private var activeList: some View {
-        List {
-            if let session = store.active {
-                ForEach(session.exercises) { exercise in
-                    Section(exercise.name) {
-                        ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
-                            setRow(exercise: exercise, set: set, index: index + 1)
-                                .swipeActions {
-                                    Button("删除", role: .destructive) {
-                                        store.deleteSet(exercise: exercise.id, set: set.id)
-                                    }
-                                }
-                        }
-                        Button("加一组", systemImage: "plus") {
-                            store.addSet(exercise: exercise.id)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var bottomBar: some View {
-        if let end = store.restEndsAt {
-            RestBanner(end: end) { store.clearRest() }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        } else if store.active == nil, !store.todayRoutines.isEmpty {
-            Button("开始今天的训练") { store.startToday() }
-                .buttonStyle(.glassProminent)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        }
+        .tint(.green)
+        .onAppear { if store.tab == .workout && store.active != nil { presenting = true } }
+        .onChange(of: store.tab) { _, tab in if tab == .workout && store.active != nil { presenting = true } }
+        .onChange(of: store.active?.id) { _, id in presenting = id != nil }
+        .fullScreenCover(isPresented: $presenting) { ActiveWorkoutView().environment(store) }
+        .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && !presenting }, set: { if !$0 { store.saveError = nil } })) {
+            Button("好") { store.saveError = nil }
+        } message: { Text(store.saveError ?? "") }
     }
 
     private func routineLabel(_ routine: Routine) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(routine.name)
-                .foregroundStyle(.primary)
-            Text(routine.exercises.isEmpty ? "还没有动作" : "\(routine.exercises.count) 个动作")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Text(routine.name).foregroundStyle(.primary)
+            Text("\(routine.exercises.count) 个动作").font(.subheadline).foregroundStyle(.secondary)
         }
-    }
-
-    private func setRow(exercise: WorkoutExercise, set: WorkoutSet, index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("第 \(index) 组")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    store.toggleSet(exercise: exercise.id, set: set.id)
-                } label: {
-                    Image(systemName: set.done ? "checkmark.circle.fill" : "circle")
-                }
-                .buttonStyle(.glass)
-                .tint(set.done ? .green : .primary)
-                .accessibilityLabel(set.done ? "已完成" : "完成本组")
-            }
-            Stepper(value: weightBinding(exercise.id, set.id, fallback: set.weight), in: 0...500, step: 1.25) {
-                Text("重量 \(formatKg(set.weight)) kg")
-            }
-            Stepper(value: repsBinding(exercise.id, set.id, fallback: set.reps), in: 0...100) {
-                Text("次数 \(set.reps)")
-            }
-            if set.done {
-                Picker("强度 RIR", selection: Binding<Int?>(
-                    get: { liveSet(exercise.id, set.id)?.rir },
-                    set: { store.setRIR(exercise: exercise.id, set: set.id, value: $0) }
-                )) {
-                    Text("未记录").tag(Int?.none)
-                    ForEach(0...10, id: \.self) { value in
-                        Text("还能做 \(value) 次").tag(Optional(value))
-                    }
-                }
-                .pickerStyle(.menu)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func weightBinding(_ exercise: UUID, _ set: UUID, fallback: Double) -> Binding<Double> {
-        Binding(
-            get: { liveSet(exercise, set)?.weight ?? fallback },
-            set: { store.setWeight(exercise: exercise, set: set, weight: $0) }
-        )
-    }
-
-    private func repsBinding(_ exercise: UUID, _ set: UUID, fallback: Int) -> Binding<Int> {
-        Binding(
-            get: { liveSet(exercise, set)?.reps ?? fallback },
-            set: { store.setReps(exercise: exercise, set: set, reps: $0) }
-        )
-    }
-
-    private func liveSet(_ exercise: UUID, _ set: UUID) -> WorkoutSet? {
-        store.active?.exercises.first { $0.id == exercise }?.sets.first { $0.id == set }
     }
 }
 
-private struct RestBanner: View {
-    var end: Date
-    var onStop: () -> Void
+enum WorkoutSheet: Identifiable, Equatable {
+    case menu, settings, addExercise, addRoutine, rename, layout, note, finish
+    var id: String { String(describing: self) }
+}
+
+struct ActiveWorkoutView: View {
+    @Environment(GymStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var sheet: WorkoutSheet?
+    @State private var flashing = false
+    @State private var previousIdleDisabled: Bool?
+
+    private var layout: WorkoutLayout { store.active?.layout ?? store.workoutPreferences.layout }
+    private var selected: WorkoutExercise? {
+        guard let session = store.active else { return nil }
+        return session.exercises.first { $0.id == session.selectedExerciseId } ?? session.exercises.first
+    }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
-            let left = max(0, Int(end.timeIntervalSince(context.date).rounded(.up)))
-            HStack(spacing: 12) {
-                Image(systemName: "timer")
-                Text(left == 0 ? "休息结束" : "休息 \(left) 秒")
-                    .font(.headline)
-                    .monospacedDigit()
-                Spacer()
-                Button("跳过", action: onStop)
-                    .buttonStyle(.bordered)
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 20) {
+                        Color.clear.frame(height: 0).id("workout-top")
+                        ProgressView(value: Double(store.activeDoneCount), total: Double(max(1, store.activeSetCount)))
+                            .accessibilityLabel("训练进度")
+                        if let session = store.active {
+                            exerciseSelector(session, proxy: proxy)
+                            if session.exercises.isEmpty {
+                                ContentUnavailableView("添加第一个动作", systemImage: "figure.strengthtraining.traditional", description: Text("从动作库选择，或把一个训练日并入本次训练。"))
+                            } else if layout == .cards, let exercise = selected {
+                                WorkoutExerciseCard(exercise: exercise, compact: false).id(exercise.id)
+                                navigation(session)
+                            } else {
+                                ForEach(session.exercises) { exercise in
+                                    WorkoutExerciseCard(exercise: exercise, compact: layout == .compact).id(exercise.id)
+                                    Divider()
+                                }
+                            }
+                            footer(session)
+                        }
+                    }
+                    .padding(16).frame(maxWidth: 760).frame(maxWidth: .infinity)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: store.active?.selectedExerciseId) { _, _ in
+                    if layout == .cards { proxy.scrollTo("workout-top", anchor: .top) }
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .capsule)
+            .background(Color(uiColor: .systemBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbar }
+            .safeAreaBar(edge: .bottom) {
+                if let end = store.restEndsAt, end > Date() { WorkoutRestBar(end: end) }
+            }
+            .overlay { if flashing { Color.green.opacity(0.15).ignoresSafeArea().allowsHitTesting(false) } }
+            .sheet(item: $sheet) { destination in
+                WorkoutSessionSheet(destination: destination)
+                    .presentationDetents(destination == .finish ? [.height(310), .medium] : [.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && sheet == nil }, set: { if !$0 { store.saveError = nil } })) {
+                Button("好") { store.saveError = nil }
+            } message: { Text(store.saveError ?? "") }
         }
-        .task(id: end) {
-            let delay = end.timeIntervalSinceNow
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
-            if !Task.isCancelled { onStop() }
+        .tint(.green)
+        .onChange(of: store.active?.id) { _, id in if id == nil { dismiss() } }
+        .onAppear { previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled; updateAwake() }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled ?? false }
+        .onChange(of: store.workoutPreferences.keepAwake) { _, _ in updateAwake() }
+        .onChange(of: scenePhase) { _, phase in
+            updateAwake()
+            if phase == .active { store.refreshWorkoutAlerts() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workoutRestFinished)) { _ in
+            guard store.workoutPreferences.flash, !reduceMotion, scenePhase == .active else { return }
+            flashing = true
+        }
+        .task(id: flashing) {
+            guard flashing else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            flashing = false
         }
     }
+
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("收起训练", systemImage: "chevron.down") { store.tab = .today; dismiss() }.labelStyle(.iconOnly)
+        }
+        ToolbarItem(placement: .principal) {
+            VStack(spacing: 2) {
+                Text(store.active?.name ?? "训练").font(.headline).lineLimit(1)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text("\(workoutClock(context.date.timeIntervalSince(store.active?.startedAt ?? context.date))) · \(store.activeDoneCount)/\(store.activeSetCount) 组")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("训练菜单", systemImage: "ellipsis") { sheet = .menu }.labelStyle(.iconOnly)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("结束") { sheet = .finish }.buttonStyle(.glassProminent)
+        }
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("完成") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        }
+    }
+
+    private func exerciseSelector(_ session: WorkoutSession, proxy: ScrollViewProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 8) {
+                    ForEach(Array(session.exercises.enumerated()), id: \.element.id) { index, exercise in
+                        let isSelected = exercise.id == selected?.id
+                        let done = !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.done)
+                        Button {
+                            store.mutateActive { $0.selectedExerciseId = exercise.id }
+                            if layout != .cards { proxy.scrollTo(exercise.id, anchor: .top) }
+                        } label: {
+                            Group {
+                                if done { Image(systemName: "checkmark") } else { Text("\(index + 1)") }
+                            }.font(.headline).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.tint(isSelected ? .green : nil).interactive(), in: .circle)
+                        .accessibilityLabel("动作 \(index + 1)，\(exercise.name)\(done ? "，已完成" : "")")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    }
+                }.padding(.vertical, 3)
+            }
+        }
+    }
+
+    private func navigation(_ session: WorkoutSession) -> some View {
+        let index = session.exercises.firstIndex(where: { $0.id == selected?.id }) ?? 0
+        return HStack {
+            Button("上一个", systemImage: "chevron.left") { select(index - 1, session) }.disabled(index == 0)
+            Spacer()
+            Button { select(index + 1, session) } label: { HStack { Text("下一个"); Image(systemName: "chevron.right") } }
+                .disabled(index + 1 >= session.exercises.count)
+        }.buttonStyle(.glass).controlSize(.large)
+    }
+
+    private func select(_ index: Int, _ session: WorkoutSession) {
+        guard session.exercises.indices.contains(index) else { return }
+        store.mutateActive { $0.selectedExerciseId = session.exercises[index].id }
+    }
+
+    private func footer(_ session: WorkoutSession) -> some View {
+        VStack(spacing: 20) {
+            Button("添加动作", systemImage: "plus") { sheet = .addExercise }.buttonStyle(.glass)
+            Button(session.note?.isEmpty == false ? "编辑训练备注" : "添加训练备注", systemImage: "note.text") { sheet = .note }.buttonStyle(.glass)
+            if let note = session.note, !note.isEmpty { Text(note).font(.subheadline).foregroundStyle(.secondary) }
+            let completed = session.exercises.filter { !$0.sets.isEmpty && $0.sets.allSatisfy(\.done) }.count
+            Button("\(store.activeDoneCount < store.activeSetCount ? "提前结束" : "结束训练") · \(completed)/\(session.exercises.count) 个动作") { sheet = .finish }
+                .buttonStyle(.glass)
+        }.frame(maxWidth: .infinity).padding(.vertical, 12)
+    }
+
+    private func updateAwake() { UIApplication.shared.isIdleTimerDisabled = scenePhase == .active && store.workoutPreferences.keepAwake }
+}
+
+struct WorkoutRestBar: View {
+    @Environment(GymStore.self) private var store
+    var end: Date
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack {
+                Label(workoutClock(end.timeIntervalSince(context.date)), systemImage: "timer").monospacedDigit().font(.headline)
+                Spacer()
+                Button("减 15 秒", systemImage: "minus") { store.adjustRest(by: -15) }.labelStyle(.iconOnly)
+                Button("加 15 秒", systemImage: "plus") { store.adjustRest(by: 15) }.labelStyle(.iconOnly)
+                Button("跳过") { store.clearRest() }
+            }.buttonStyle(.glass).padding(12)
+        }
+    }
+}
+
+func workoutClock(_ interval: TimeInterval) -> String {
+    let seconds = max(0, Int(interval))
+    return seconds >= 3600 ? String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60) : String(format: "%d:%02d", seconds / 60, seconds % 60)
 }
