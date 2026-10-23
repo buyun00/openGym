@@ -24,6 +24,12 @@ final class WaterMotion: NSObject, ObservableObject {
         frame = dynamics.frame
     }
 
+    func setViewport(_ size: CGSize) {
+        guard size.height > 0 else { return }
+        dynamics.setAspectRatio(Double(size.width / size.height))
+        frame = dynamics.frame
+    }
+
     func configure(active: Bool, reduceMotion: Bool) {
         let thermal = ProcessInfo.processInfo.thermalState
         let fps = WaterPlayback.framesPerSecond(active: active, reduceMotion: reduceMotion,
@@ -131,8 +137,8 @@ final class WaterMotion: NSObject, ObservableObject {
         if previousTimestamp == 0 { logger.info("Water display clock delivered its first frame") }
         let dt = previousTimestamp == 0 ? 1 / Double(framesPerSecond) : link.timestamp - previousTimestamp
         previousTimestamp = link.timestamp
-        let input = sample?.projected(for: screenOrientation) ?? (slope: 0, acceleration: 0)
-        dynamics.advance(dt: dt, slope: input.slope, acceleration: input.acceleration)
+        let input = sample?.projected(for: screenOrientation) ?? WaterForcing()
+        dynamics.advance(dt: dt, forcing: input)
         frame = dynamics.frame
     }
 

@@ -1,0 +1,26 @@
+{
+  "scope": "Python fluid reference and production shader arithmetic translated to GLSL; NOT Swift execution, Metal compilation, native UI or device motion validation",
+  "renderer": "NVIDIA GeForce RTX 3060/PCIe/SSE2",
+  "opengl": "4.3.0 NVIDIA 610.88",
+  "frames": 192,
+  "reference_fps": 24,
+  "volume_error_during_trace": 1.1102230246251565e-16,
+  "changed_pixel_mean": 11.016025921071792,
+  "reference_checks": {
+    "scope": "Python reference equations only; Swift tests are not executed",
+    "max_volume_error": 3.3306690738754696e-16,
+    "curved_surface_rms": 0.015241652087960838,
+    "settled_amplitude": 0.0003649687585337569,
+    "frame_rate_max_difference": 8.769416510023831e-05
+  },
+  "swift_tests_executed": false,
+  "metal_compiled": false,
+  "swiftui_rendered": false,
+  "device_motion_tested": false,
+  "sha256": {
+    "frontend/ios/App/App/Native/WaterScene.metal": "795e27249145e7e36ddb5eea0e6508eaeaaa7ffe526ec52e5956084c1b48e71c",
+    "frontend/ios/App/App/Native/WaterPhysics.swift": "2eb5886b65cb0749e231b901144b1127b2549a5429a39fe5e45303a9d00177ae",
+    "scripts/ios/render-water-diagnostic.py": "253edd325d146d34746d62df017f2a2ad3c2e7f7e44e0ba85ba90fcc5b456782",
+    "scripts/ios/water_fluid_reference.py": "a743ad1f7cd94d05259511520645e0eecb54481c3d39c277ab07b60a130fb29f"
+  }
+}

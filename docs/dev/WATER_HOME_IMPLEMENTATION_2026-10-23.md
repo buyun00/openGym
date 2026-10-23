@@ -2,33 +2,37 @@
 
 本轮已完成本地源码实现，尚未完成 iOS 编译和真机验收。基线 `71ac9f52`，继续原 `main` checkout；按用户后续授权提交源码，由用户在另一台电脑打包，本轮不构建或发布安装包。原有调研文档与批准概念图未改动。
 
-## 2026-10-23 最新反馈：水体不动、加号移到最左侧
+## 2026-10-23 最新反馈：独立圆按钮与传播的水波
 
-本次基于 `941b1aa9`。用户确认手机未开启低电量模式或“减少动态效果”，并放弃中央凸起按钮，要求恢复通用系统 Tab、把加号放最左边。源码修复已完成；下述原因是源码检查结论，尚无该 iPhone 的运行日志来确认唯一根因。
+用户明确要求左侧“开始”是独立圆形按钮，右侧才是导航页签；晃动手机时应出现局部波峰、拍壁与回落，不能只让一条水面绕中点旋转。
 
-- 底栏顺序调整为“开始（+）/ 今天 / 计划 / 身体 / 喝水”。全部使用普通系统 `Tab`，删除中央叠加按钮、透明占位图、UIKit 几何探测文件及其工程引用。启动页仍为“今天”；加号仍进入既有训练页，保留活跃训练标记。没有单独绘制一条底栏。
-- App 由 UIKit `SceneDelegate` 托管，原水体与首页刷新却依赖 SwiftUI `scenePhase`。现在通过可观察的场景对象把 UIKit 的活跃、失活、后台状态显式写入根视图环境，首次进入及返回前台都走同一启停链路。依据：[Apple 场景回调](https://developer.apple.com/documentation/uikit/uiscenedelegate/scenedidbecomeactive(_:))、[SwiftUI scenePhase](https://developer.apple.com/documentation/swiftui/environmentvalues/scenephase)。
-- 水体改为 `StateObject` 持有控制器，每个 `CADisplayLink` 回调发布一个完整帧；`body` 在进入 `GeometryReader` 闭包前读取帧，直接刷新 shader 的时间、倾角和波幅。自然水纹时间独立于传感器样本；缺少运动传感器不会冻结水纹。
-- Core Motion 改为明确的样本回调，失败时尝试加速度计；回调代次检查避免切页或后台后旧样本重新写入。保留四种屏幕方向映射，移除近乎平放时直接忽略全部侧向倾斜的硬阈值；倾斜与晃动经过弹簧衰减，停止摇动后逐渐回稳。日志分别记录时钟启动、首帧、首个运动样本及传感器错误，方便后续真机定位。
-- 低电量或严重发热降低至目标 15 Hz，正常目标 30 Hz；非活跃、减少动态效果或临界发热停止。降低透明度只切换成不透明的水面，保留重力变化，不再等同于停动画。
-- 增加 7 项纯 Swift 回归用例，直接覆盖生产 `WaterDynamics` / `WaterMotionSample`：无传感器时相位前进、四方向重力、近乎平放的侧倾、回荡与水量、加水、暂停策略与恢复、异常时间/输入。当前 Windows 没有 Swift 工具链，测试仅完成语法解析，**未执行 XCTest**。
+- 左侧是 60 pt 原生 SwiftUI 加号 Button，右侧是四项导航胶囊，二者间距 12 pt；GlassEffectContainer 的合并距离设为 6 pt，静止时不会融合。使用系统 Liquid Glass 材质，不读取或覆盖系统 TabBar 几何。四个实际 Tab 保留各自 NavigationStack；训练作为独立内容入口，沿用既有选择训练、继续训练和全屏训练流程。键盘出现时收起底部组件，VoiceOver 分别读取动作与导航项。**这是原生控件组成的定制布局，不是 UITabBar 提供的现成“左侧分离动作”样式。** 依据：[Apple Liquid Glass 组合](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)。
+- 移除整体倾角和单个波幅参数。水体改为 64 个相邻单元，每格存储水深与动量；用一维浅水方程、Rusanov 通量和反射边界计算水量流动。重力与线性加速度作为力进入模拟，侧壁先堆水，再向内形成传播的波峰；释放后惯性继续传播并逐渐耗散。参考方程：[Clawpack shallow-water equations](https://www.clawpack.org/riemann_book/html/Shallow_water.html)。这部分是项目自行实现，没有引入 Clawpack 运行时。
+- 加水在局部触发扰动，明显竖向冲量也会产生局部波纹；使用 CFL 条件选择子步，独立于 15/30/60 Hz 显示帧率。封闭边界、干区和顶部约束下校正水量，0/满屏不制造额外水。旋转窗口时保留水量与归一化波形。
+- shader 接收每格水深、流速和泡沫数组，按局部水深画水面，折射跟随局部流速；压缩波和撞壁产生短暂泡沫。数组按 Apple 的 `device const float *ptr, int count` 参数对接入：[Shader.Argument](https://developer.apple.com/documentation/swiftui/shader/argument)。降低透明度路径读取同一段水面，减少动态时回归静水。
+- 上一轮 UIKit → SwiftUI 场景同步、逐帧发布、Core Motion 回调/加速度计降级、旧回调失效检查、低电量降帧和临界发热暂停继续保留。没有传感器时，光学水纹仍按时钟更新。
+- 更新了 11 项 Swift 水体运动用例，以及原来的极端水量守恒用例，覆盖壁面起波而非中点旋转、局部波传播/反射、释放后的回落、帧率、加水、窗口尺寸、竖向冲量与异常输入。**Windows 无 Swift 工具链，这些 XCTest 未执行。**
 
-此前 `92047ad6` 已修复“无目标但已喝 1000 mL 没有水”：未设置目标时，使用界面标注的 2000 mL 满刻度显示实际水量，1000 mL 对应半屏；不写入每日目标，也不把显示刻度作为取消提醒的条件。原先中央按钮方案已按本次反馈移除。
+Windows 已运行独立 Python 数值参考模型，并将生产 Metal 的运算转换为 GLSL 做 192 帧离屏渲染；检查了局部波形、两侧传播与回落。参考模型水量最大误差约 3.3e-16，15/60 Hz 的水深最大差约 8.8e-5，释放 10 秒后波幅低于 0.001。**这些是数值参考与着色器运算证据，不是 Swift 执行、Metal 编译、原生底栏视觉或 iPhone 传感器验证。**
 
-交付前远端已推进至 `7e154a74`，包含签名配置及身体、喝水、训练页更新。已保留这些已发布提交，再叠加本次修复；另外复查了合并后 7 个改动 Swift / Package 文件的语法和 Xcode Native 引用。下方 24 文件报告仍明确限定为最初独立修复快照，新增交付整合检查及哈希另记在 JSON 的 `delivery_integration`，不代表完整 App 编译通过。
+![水波逐帧运算诊断，非 iOS 界面](water-slosh-evidence-2026-10-23/water-slosh-frames.png)
+
+[连续水波诊断动画](water-slosh-evidence-2026-10-23/water-slosh-diagnostic.webp) · [运算证据与源码哈希](water-slosh-evidence-2026-10-23/shader-diagnostic.json)
+
+此前“1000 mL / 未设置目标无水”的修正继续保留：未设目标时使用界面标注的 2000 mL 满刻度显示水量，不会把此显示刻度写为每日目标或当成取消提醒的条件。系统五 Tab 和中央凸起按钮的旧方案已被本节布局替代。
 
 ## 已实现的源码
 
 - 首页只保留今日训练、今日饮水和今日服用。训练为只读摘要，继续使用底部“开始”；首页没有日期选择、周历、称重入口或第二个开始按钮。
-- 保留系统 `TabView` / `Tab`、`NavigationStack`、原生表单、日期时间选择器、弹窗和 `.glass` 按钮；原生加号 Tab 位于最左侧。普通信息卡用系统 Material，水体延伸到安全区和 Tab 栏背后。没有 WebView、自绘 Tab 栏或概念图背景贴图。
-- 全屏 Metal 青蓝水体、细水面高光、折射、两层弯曲焦散、深浅色。Core Motion 提供重力和线性加速度，Wave 标量弹簧驱动倾角、加水和衰减回荡；逐帧计算截面水量，倾斜和近满/近空时通过求解水线保持体积。超过目标保留真实数值，背景最多填满。
-- 水体与文字/控件是分离的视图，折射只应用于背景。首页不可见、覆盖表单、App 非活跃时停止显示刷新和运动采样；减少动态或临界发热时静止；低电量/严重发热目标 15 Hz；降低透明度使用仍受重力驱动的不透明水面；无运动传感器时保留自然水纹，倾角归零。正常目标刷新率 30 Hz，尚未测量 iPhone 帧率/耗电。
+- 保留四个 Tab 内容和 NavigationStack；底栏用独立圆形加号及四项玻璃导航胶囊组合。表单、日期时间选择器和弹窗继续使用原生控件，水体延伸到安全区与底栏背后，没有 WebView 或背景贴图。
+- 全屏 Metal 青蓝水体、细水面高光、折射、两层弯曲焦散、深浅色。Core Motion 提供重力和线性加速度，64 格浅水模拟驱动流速、波峰传播和反射；Wave 弹簧仅平滑记录水量的增减，不再驱动整体角度。超过目标保留真实数值，背景最多填满。
+- 水体与文字/控件是分离的视图，折射只应用于背景。首页不可见、覆盖表单、App 非活跃时停止显示刷新和运动采样；减少动态或临界发热时静止；低电量/严重发热目标 15 Hz；降低透明度使用仍受重力驱动的不透明水面；无运动传感器时保留自然光学水纹，模拟不施加侧向外力。正常目标刷新率 30 Hz，尚未测量 iPhone 帧率/耗电。
 - 饮水可配置目标和杯量，快捷追加、自定义、撤销、修改量/时间、按日查看和删除。第一次启动饮水为零，目标未设置，未写入概念图中的示例数据。
 - B 沿用用户每天 3 次的计划，按当日 3 个稳定实例记录；D 每周 1 次，星期由用户设置，非计划日不制造今日目标。逐次确认、撤销、去重，修改时点不重置完成记录；改 D 的星期也不会在同一周多累计一次。未设置时点不安排服用提醒；没有剂量建议。
 - 饮水和服用提醒分别开关，读取系统真实授权状态。只有用户保存开启设置才请求权限。采用未来 7 天的一次性本地提醒，已服用实例与当天已达饮水目标会取消剩余提醒，每次前台打开及跨日续排。上限不足或添加失败会显示真实结果。**超过 7 天不打开 App，提醒将停止**，界面已说明此边界。
 - 饮水/服用独立原子保存到 Application Support/openGym/wellness-state.json。写成功才更新界面；读取失败保护原文件并拒绝覆盖。既有 gym-state.json 与训练/体重 Snapshot 未改变。体重目标编辑移到身体页，保留原功能。
 
-这是 2.5D 水面与光学表现，并非完整流体求解器；开源项目也没有被称为一体化水体引擎。
+这是有水量守恒和波传播的二维截面表现；仍不是完整三维流体、可翻卷的破碎波或飞溅粒子模拟。
 
 ## 复用与许可证
 
@@ -37,7 +41,7 @@
 | 来源 | 固定 revision | 使用方式 |
 |---|---|---|
 | [Inferno](https://github.com/twostraws/Inferno) | `a40c7a0bdec03aae1bd0b96c41d6a75451bafd2c` | Water.metal 的 float sin/cos 折射与相位处理，适配为程序化水体坐标 |
-| [Wave](https://github.com/jtrivedi/Wave) | `27b7e1d2d42b8a4f56d9e84213910b0441c8b810` | Spring / SpringInterpolatable 的标量力与阻尼积分；加入固定子步、范围保护和水面求解 |
+| [Wave](https://github.com/jtrivedi/Wave) | `27b7e1d2d42b8a4f56d9e84213910b0441c8b810` | Spring / SpringInterpolatable 的标量力与阻尼积分；只用于水量增减的平滑 |
 | [SwiftUIShaders](https://github.com/krispuckett/SwiftUIShaders) | `6b644a8bd4f3131401bd6765990e476352d3cdef` | underwater-caustics 的双层 cellular light 思路；改为最近边缘光纹、弯曲域，省去多层 FBM 和纹理采样 |
 
 MIT 全文与改动说明保存在 `frontend/ios/App/App/Native/WaterThirdPartyNotices.txt`，已作为 App resource 接入，设置页可查看。Foil alpha、Liquid 和未核实授权的 WebGL Water 均未引入。
@@ -58,11 +62,11 @@ MIT 全文与改动说明保存在 `frontend/ios/App/App/Native/WaterThirdPartyN
 
 | 检查 | 实际结果与范围 |
 |---|---|
-| Swift 语法树解析 | 本次独立快照中 24 个文件解析无 ERROR / missing node；不是 Swift 类型检查，也不包含其它任务未提交修改 |
+| Swift 语法树解析 | 当前提交快照中 6 个改动 Swift 文件及 SceneDelegate / Package 依赖解析无 ERROR / missing node；不是 Swift 类型检查，不把其它未提交代码计作通过 |
 | Xcode 工程结构 | 对象 ID、全部 Native 源文件、Metal Sources、许可 Resources、Info.plist 均通过静态检查 |
-| 首页范围检查 | 源码中为系统 5 个 Tab，无首页日期选择/周历/称重/训练开始调用，无 WebView |
+| 首页范围检查 | 源码为 4 个 Tab 内容和独立圆按钮；首页范围检查与无 WebView 检查 |
 | 水体运算预览 | 生产 Metal 代码作类型别名转换，在 Windows RTX 3060 的离屏 OpenGL context 编译并渲染；查看了 0/25/50/75/100%、两向倾斜和深色截图。发现并修正了过于规则的焦散格线 |
-| 19 项 Swift XCTest | 已加入（含本次 7 项水体运动回归），覆盖无目标时水量可见、目标切换与提醒独立、空初始数据、跨日、B/D 去重、每周改日、原子存取/纠正/撤销、损坏文件保留、提醒取消、DST/跨年、截面体积、弹簧衰减。当前没有 Swift 工具链，**未执行** |
+| Swift XCTest | 水体运动现为 11 项，另保留业务用例并更新极端水量守恒检查；覆盖无目标时水量可见、目标切换与提醒独立、空初始数据、跨日、B/D 去重、每周改日、原子存取/纠正/撤销、损坏文件保留、提醒取消、DST/跨年、截面体积、弹簧衰减。当前没有 Swift 工具链，**未执行** |
 | iOS / Metal 编译 | **未执行**：Windows 无 Xcode，未获得可用 Mac 入口 |
 | iPhone 视觉/交互/性能 | 用户已提供旧版问题截图；**修正后未验证**，无新版原生运行截图、重力方向真机证据、帧率、耗电或热测试 |
 
@@ -79,8 +83,8 @@ Windows 静态检查（依赖可装到临时目录，不是 App 依赖）：
 ```text
 python -m pip install tree-sitter==0.26.0 tree-sitter-swift==0.7.4 openstep-parser==2.0.3
 python scripts/ios/check-native-home.py
-python -m pip install moderngl==5.13.0 glcontext==3.1.0 pillow==13.0.0
-python scripts/ios/render-water-diagnostic.py docs/dev/water-home-evidence-2026-10-23
+python -m pip install numpy moderngl==5.13.0 glcontext==3.1.0 pillow==13.0.0
+python scripts/ios/render-water-diagnostic.py docs/dev/water-slosh-evidence-2026-10-23
 ```
 
 Mac / Linux / Windows 的 Swift 5.9+ 环境可运行纯逻辑测试，不需要 CocoaPods 或签名：

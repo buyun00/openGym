@@ -15,25 +15,28 @@ struct WaterBackground: View {
         // content closure, to explicitly invalidate the shader every frame.
         let frame = motion.frame
         GeometryReader { geometry in
-            let surface = WaterSurface(fill: frame.level, slope: frame.tilt * geometry.size.width / max(1, geometry.size.height),
-                                       swell: frame.swell, ripple: reduceMotion || reduceTransparency ? 0 : 0.0025,
+            let surface = WaterSurface(depths: frame.depths, ripple: reduceMotion || reduceTransparency ? 0 : 0.0018,
                                        phase: frame.phase)
-            if reduceTransparency {
-                ZStack {
-                    Color(uiColor: .systemBackground)
-                    SolidWaterShape(surface: surface)
-                        .fill(colorScheme == .dark ? Color(red: 0.04, green: 0.15, blue: 0.22)
-                              : Color(red: 0.84, green: 0.95, blue: 0.98))
+            Group {
+                if reduceTransparency {
+                    ZStack {
+                        Color(uiColor: .systemBackground)
+                        SolidWaterShape(surface: surface)
+                            .fill(colorScheme == .dark ? Color(red: 0.04, green: 0.15, blue: 0.22)
+                                  : Color(red: 0.84, green: 0.95, blue: 0.98))
+                    }
+                    .clipped()
+                } else {
+                    Rectangle().fill(.white)
+                        .colorEffect(ShaderLibrary.opengymWater(
+                            .float2(Float(geometry.size.width), Float(geometry.size.height)), .float(Float(frame.phase)),
+                            .floatArray(frame.depths.map(Float.init)), .floatArray(frame.velocities.map(Float.init)),
+                            .floatArray(frame.foam.map(Float.init)), .float(Float(surface.rippleAmplitude)), .float(Float(frame.level)),
+                            .float(colorScheme == .dark ? 1 : 0)))
                 }
-                .clipped()
-            } else {
-                Rectangle().fill(.white)
-                    .colorEffect(ShaderLibrary.opengymWater(
-                        .float2(Float(geometry.size.width), Float(geometry.size.height)), .float(Float(frame.phase)),
-                        .float(Float(surface.base)), .float(Float(surface.slope)),
-                        .float(Float(surface.swell)), .float(Float(surface.ripple)),
-                        .float(colorScheme == .dark ? 1 : 0)))
             }
+            .onAppear { motion.setViewport(geometry.size) }
+            .onChange(of: geometry.size) { _, size in motion.setViewport(size) }
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -59,12 +62,11 @@ private struct SolidWaterShape: Shape {
     var surface: WaterSurface
 
     func path(in rect: CGRect) -> Path {
-        let base = surface.base
         var path = Path()
         for index in 0...96 {
             let x = Double(index) / 96
             let point = CGPoint(x: rect.minX + x * rect.width,
-                                y: rect.minY + (base + surface.displacement(at: x)) * rect.height)
+                                y: rect.minY + surface.waterline(at: x) * rect.height)
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))

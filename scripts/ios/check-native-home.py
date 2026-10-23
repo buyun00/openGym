@@ -2,6 +2,7 @@
 Does not typecheck Swift, compile Metal or run the iOS app.
 """
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import plistlib
@@ -16,8 +17,13 @@ ROOT = Path(__file__).resolve().parents[2]
 IOS = ROOT / "frontend/ios"
 NATIVE = IOS / "App/App/Native"
 parser = tree_sitter.Parser(tree_sitter.Language(tree_sitter_swift.language()))
+arguments = argparse.ArgumentParser(description=__doc__)
+arguments.add_argument("--swift-file", action="append", help="Limit Swift syntax parsing to these repository-relative files; project/source-wiring checks still run")
+options = arguments.parse_args()
 errors = []
 files = sorted(NATIVE.glob("*.swift")) + sorted((IOS / "Tests").rglob("*.swift")) + [IOS / "Package.swift", IOS / "App/App/SceneDelegate.swift"]
+if options.swift_file:
+    files = [ROOT / name for name in options.swift_file]
 for file in files:
     data = file.read_bytes()
     tree = parser.parse(data)
@@ -52,20 +58,23 @@ checks = {
     "metal_in_sources": "WaterScene.metal" in sources,
     "license_in_resources": "WaterThirdPartyNotices.txt" in resources,
     "motion_usage_description": bool(plist.get("NSMotionUsageDescription")),
-    "system_tab_view": "TabView(selection:" in root and len(re.findall(r'\bTab\(', root)) == 5,
-    "native_plus_first": tab_order == ["workout", "today", "plan", "body", "water"] and 'systemImage: "plus"' in root,
+    "four_navigation_tabs": "TabView(selection:" in root and tab_order == ["today", "plan", "body", "water"],
+    "independent_start_button": 'Button { select(.workout) }' in root and 'accessibilityIdentifier("start-workout-action")' in root and 'value: AppTab.workout' not in root,
+    "separate_native_glass_shapes": 'GlassEffectContainer(spacing: 6)' in root and 'HStack(spacing: 12)' in root and 'in: .circle' in root and 'in: .capsule' in root,
     "custom_center_button_removed": "NativeTabBarAnchor" not in root and "NativeTabBarAnchor.swift" not in sources and not (NATIVE / "NativeTabBarAnchor.swift").exists(),
     "scene_lifecycle_source_wiring": all(token in scene for token in [r'.environment(\.scenePhase, lifecycle.phase)', "sceneDidBecomeActive", "sceneWillResignActive", "sceneDidEnterBackground"]),
     "published_water_frame_source_wiring": "@Published private(set) var frame" in motion and "@StateObject private var motion" in background and background.index("let frame = motion.frame") < background.index("GeometryReader" + " {"),
     "sensor_callback_source_wiring": "startDeviceMotionUpdates(to: .main)" in motion and "sensorGeneration == generation" in motion,
+    "distributed_surface_source_wiring": '.floatArray(frame.depths' in background and '.floatArray(frame.velocities' in background and 'frame.tilt' not in background and 'tiltSpring' not in (NATIVE / 'WaterPhysics.swift').read_text('utf8'),
     "home_scope": all(token not in today for token in ["weekStrip", "DatePicker", "showWeighIn", "store.openToday", "store.startToday"]),
     "no_webview_home": all(token not in today for token in ["WKWebView", "UIViewRepresentable", "HTML"]),
     "separate_persistence": 'wellness-state.json' in (NATIVE / 'WellnessStore.swift').read_text('utf8')
 }
-evidence_files = files + [NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]
+evidence_files = list(dict.fromkeys(files + [NATIVE / "TodayView.swift", NATIVE / "WellnessStore.swift", IOS / "App/App/SceneDelegate.swift", NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]))
 report = {
     "scope": "Windows static syntax and project structure only; NOT Swift typecheck, Metal compilation, Swift test execution or iOS runtime",
     "swift_files_parsed": len(files), "checks": checks, "syntax_errors": errors, "missing_build_sources": missing,
+    "syntax_scope": [file.relative_to(ROOT).as_posix() for file in files],
     "existing_generated_prerequisites_missing": [p for p in ["App/App/public", "App/App/config.xml", "App/App/capacitor.config.json", "App/Pods"] if not (IOS / p).exists()],
     "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence_files}
 }

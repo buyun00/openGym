@@ -178,13 +178,20 @@ final class WellnessCoreTests: XCTestCase {
         XCTAssertEqual(WellnessDay.weekKey(date("2027-01-01T12:00:00+08:00"), calendar: calendar), "2026-12-28")
     }
 
-    func testVolumeConservationAtAllProgressLevelsAndTilts() {
+    func testVolumeConservationAtAllProgressLevelsDuringSloshing() {
         for fill in [0.0, 0.005, 0.25, 0.5, 0.75, 0.995, 1.0, 1.5] {
-            for slope in [-3.0, -1.0, 0.0, 1.0, 3.0] {
-                let surface = WaterSurface(fill: fill, slope: slope, swell: 0.06, ripple: 0.0025, phase: 2.7)
-                // Independent high-resolution integration of the visible cross-section.
-                XCTAssertEqual(surface.area(base: surface.base, samples: 8192), min(1, fill), accuracy: 0.0002)
+            var fluid = WaterFluid()
+            fluid.reset(fill: fill)
+            for index in 0..<120 {
+                let t = Double(index)
+                fluid.advance(dt: 1 / 30.0, forcing: WaterForcing(gravityX: 0.6 * sin(t * 0.2),
+                                                                 accelerationX: 1.2 * sin(t * 0.3)))
+                XCTAssertEqual(fluid.depths.reduce(0, +) / Double(WaterFluid.cellCount), min(1, fill), accuracy: 0.0000001)
+                XCTAssertTrue(fluid.depths.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 1 })
             }
+            let surface = WaterSurface(depths: fluid.depths, phase: 2.7)
+            // Independent integration of the rendered cross-section.
+            XCTAssertEqual(surface.area(samples: 8192), min(1, fill), accuracy: 0.0002)
         }
     }
 
