@@ -1,6 +1,6 @@
 {
   "scope": "Windows static syntax and project structure only; NOT Swift typecheck, Metal compilation, Swift test execution or iOS runtime",
-  "swift_files_parsed": 22,
+  "swift_files_parsed": 23,
   "checks": {
     "swift_syntax": true,
     "project_object_identifiers": true,
@@ -28,8 +28,9 @@
     "frontend/ios/App/App/Native/GymModels.swift": "225efa4e58dc1a8e50e45e1133a59cb4b1c9d9422c6b76aef69b8504e5652b3d",
     "frontend/ios/App/App/Native/GymStore.swift": "87b9bc73caf8e244e81fc9907a7caabdb608dd351335fa15074aea29d2176c2c",
     "frontend/ios/App/App/Native/LibraryView.swift": "8908de8ced7f35990ac9ad2a1473dff8a7de92f701497fea0ef8232c14cc74fd",
+    "frontend/ios/App/App/Native/NativeTabBarAnchor.swift": "19849c1a4b5ed2ad4072bfaf6abc8d7439acdac854e841e5d1a1b086f0e6e30c",
     "frontend/ios/App/App/Native/PlanView.swift": "4fbea77574529a58d4cf3a68502adde92b4f1e250408676aa7f43ae9f27608aa",
-    "frontend/ios/App/App/Native/RootView.swift": "d2ff8fe910c2259c6367fa7346c7a88bda3117893d701ca92e643972341e1e62",
+    "frontend/ios/App/App/Native/RootView.swift": "e0196ad42b903baaa01b5a51dd3ab4800822363fde4a13725280a590921d334b",
     "frontend/ios/App/App/Native/RoutineEditorView.swift": "791cf88465c9d2d4ec1927be5d6d6657bd137f91700fbe5c05610c9b7ff91684",
     "frontend/ios/App/App/Native/TodayView.swift": "2cd88235029b91f23e0850ce0b514b55728461ed30d4d63f88361e96b5f456fe",
     "frontend/ios/App/App/Native/WaterBackground.swift": "5eb57a65ad860296dd03d5173a44395e100cda9e561e23a5dfac9f6caec58527",
@@ -43,10 +44,12 @@
     "frontend/ios/App/App/Native/WellnessStore.swift": "4962f07669d12ef833cfc2d387d7a0e1c4d1a8d69550ab87f1ad78247b40890c",
     "frontend/ios/App/App/Native/WorkoutView.swift": "864b4011f78dbc58892c8bc7f65b6dd55196d4f4d84b6173d59fc0c12bfcd8ef",
     "frontend/ios/Tests/WellnessCoreTests/WellnessCoreTests.swift": "d0eda6ebc28de669582d3bcb5bcea2e74b63e78de107978d874bf32462318c68",
-    "frontend/ios/Package.swift": "867baa73d70d53a71f8e26e2720b1b32a026db5e8f3c0c05e30e2dea40892ee7",
+    "frontend/ios/Package.swift": "6e2a71a4fa75a450dfd7aaadc69eb5d5e9162938ee9ec2f4b17c70b2f435684d",
     "frontend/ios/App/App/Native/WaterScene.metal": "c895cd48ceb54782e506e9017e2a51f9aa2aa9705d520775425b53af21c7057a",
     "frontend/ios/App/App/Native/WaterThirdPartyNotices.txt": "48a5b96d6426d835725a669a51343daff1885ccd2474d7461fa3a9ecc6d80e71",
-    "frontend/ios/App/App.xcodeproj/project.pbxproj": "c9805e1f138b424429edec6a20aa7dacb5b1fb9d68b56416671289decc8d9c09",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj": "24ccace5c7f10b69940c92f611f65e3d1374b9dca4a5f072a7b8d51f5b7c84fe",
     "frontend/ios/App/App/Info.plist": "e7e8180ff5f27ef380d55023a6aa661ee68d039c786536d9db9acefad4c2dcb5"
-  }
+  },
+  "validation_base_commit": "92047ad6ad6822a392b8a0dec62f8afb71a16e79",
+  "validation_context": "Isolated tracked baseline plus center-tab changes; concurrent working-tree Body and workout changes excluded. SHA-256 hashes refer to LF-normalized snapshot contents."
 }

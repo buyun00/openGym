@@ -5,6 +5,7 @@ from pathlib import Path
 import hashlib
 import json
 import plistlib
+import re
 import sys
 import tree_sitter
 import tree_sitter_swift
@@ -47,7 +48,7 @@ checks = {
     "metal_in_sources": "WaterScene.metal" in sources,
     "license_in_resources": "WaterThirdPartyNotices.txt" in resources,
     "motion_usage_description": bool(plist.get("NSMotionUsageDescription")),
-    "system_tab_view": "TabView(selection:" in root and root.count('Tab("') == 5,
+    "system_tab_view": "TabView(selection:" in root and len(re.findall(r'\bTab\(', root)) == 5,
     "home_scope": all(token not in today for token in ["weekStrip", "DatePicker", "showWeighIn", "store.openToday", "store.startToday"]),
     "no_webview_home": all(token not in today for token in ["WKWebView", "UIViewRepresentable", "HTML"]),
     "separate_persistence": 'wellness-state.json' in (NATIVE / 'WellnessStore.swift').read_text('utf8')

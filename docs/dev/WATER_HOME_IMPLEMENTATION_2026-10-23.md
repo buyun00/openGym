@@ -4,16 +4,17 @@
 
 ## 2026-10-23 用户截图反馈修正
 
-在当前 `94f4d351` 基线上修正，保留已有图标提交。用户截图显示已记录 1000 mL、目标尚未设置、背景没有水，以及“开始”仍是普通播放图标。
+水位修正在 `94f4d351` 基线上完成，中央按钮修正基于 `92047ad6`，均保留已有图标提交。用户截图显示已记录 1000 mL、目标尚未设置、背景没有水，以及“开始”仍是普通播放图标。用户随后明确要求正中间凸起的大按钮，并提供旧版底栏作为参考。
 
-- “开始”移至系统 Tab 栏尾部，使用独立的加号入口，仍打开既有 WorkoutView，保留训练进行中的徽标。Xcode 27 / iOS 27 使用 `TabRole.prominent`；Xcode 26 / iOS 26 使用系统 `.search` 独立位置并显式指定“开始”/`plus`，不附加搜索框。兼容分支有编译器和系统版本保护，没有自绘 Tab 栏。系统将独立入口放在右侧，不承诺旧 Web 版的中央凸起布局。依据：[Apple TabRole.prominent](https://developer.apple.com/documentation/swiftui/tabrole/prominent)、[SwiftUI 更新说明](https://developer.apple.com/documentation/updates/swiftui)、[Xcode / Swift 版本表](https://developer.apple.com/xcode/system-requirements)。
+- 最终顺序为“今天 / 计划 / 开始 / 身体 / 喝水”，移除右侧 `.search` / `.prominent` 方案。系统 TabView 保留五个真实导航项，中间第三项继续负责导航和无障碍；其上叠加直径最高 60 pt、向上突出 16 pt 的原生 SwiftUI 圆形加号 Button，使用交互式 Liquid Glass，打开既有 WorkoutView。活跃训练保留“练”标记。**这是原生组件组合的定制布局，不是系统 TabView 的现成中央凸起样式，也不是整条自绘底栏。** 依据：[Apple UITabBar](https://developer.apple.com/documentation/uikit/uitabbar)、[SwiftUI Liquid Glass](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)。
+- `NativeTabBarAnchor` 只读取公开 UITabBar 几何位置，中央按钮按当前容器中线定位，不访问或替换系统私有子视图。关闭滚动时收缩底栏，避免中央按钮与导航脱离；键盘弹出时隐藏叠加按钮。原生中间 Tab 保留供 VoiceOver / 键盘使用，叠加按钮不重复加入无障碍焦点；按钮在 RootView 内，服从正常 sheet 层级。未测得底栏或 iPad 使用顶部标签时回退到普通中央圆形加号 Tab。
 - 原因是 `progress` 在未设目标时返回 0，首页又将它直接作为水位。现将目标完成率与水位分开：未设目标时，以界面明确标注的 2000 mL 满刻度显示实际饮水量；1000 mL 对应半屏，0 mL 仍为空。这个刻度不写入每日目标，也不作为提醒取消条件。设置目标后水位沿用用户目标，超过刻度时水位最多满屏，实际 mL 保持不变。
-- 添加两项 XCTest 回归案例，覆盖截图的 1000 mL / 无目标、超刻度、撤销、跨日、提醒不被误取消、设置/更改/清除目标和记录保持。Windows 静态语法与工程检查已重新通过；新增 Swift 测试仍未执行，独立加号的布局/点击/VoiceOver 与修正后水体仍待 Mac / iPhone 验证。未改动 shader，因此没有重复生成或冒充新的原生效果图。
+- 水位修正已添加两项 XCTest 回归案例，覆盖截图的 1000 mL / 无目标、超刻度、撤销、跨日、提醒不被误取消、设置/更改/清除目标和记录保持。中央按钮的静态检查在 `92047ad6` 加本次改动的独立快照中进行，未纳入同时编辑中的身体页文件；证据 JSON 明确记录此范围。Swift 测试仍未执行，中央按钮的实际凸起高度/点击范围/VoiceOver/横竖屏/键盘与修正后水体仍待 Mac / iPhone 验证。未改动 shader，因此没有重复生成或冒充新的原生效果图。
 
 ## 已实现的源码
 
 - 首页只保留今日训练、今日饮水和今日服用。训练为只读摘要，继续使用底部“开始”；首页没有日期选择、周历、称重入口或第二个开始按钮。
-- 保留系统 `TabView` / `Tab`、`NavigationStack`、原生表单、日期时间选择器、弹窗和 `.glass` 按钮。普通信息卡用系统 Material，水体延伸到安全区和 Tab 栏背后。没有 WebView、自绘 Tab 栏或概念图背景贴图。
+- 保留系统 `TabView` / `Tab`、`NavigationStack`、原生表单、日期时间选择器、弹窗和 `.glass` 按钮；按用户修正将原生加号 Button 叠加在底栏正中间。普通信息卡用系统 Material，水体延伸到安全区和 Tab 栏背后。没有 WebView、自绘 Tab 栏或概念图背景贴图。
 - 全屏 Metal 青蓝水体、细水面高光、折射、两层弯曲焦散、深浅色。Core Motion 提供重力和线性加速度，Wave 标量弹簧驱动倾角、加水和衰减回荡；逐帧计算截面水量，倾斜和近满/近空时通过求解水线保持体积。超过目标保留真实数值，背景最多填满。
 - 水体与文字/控件是分离的视图，折射只应用于背景。首页不可见、覆盖表单、App 非活跃时停止显示刷新和运动采样；减少动态、低电量、严重发热时静止；降低透明度时用静态纯色水位；无运动传感器时保留自然水纹，倾角归零。目标刷新率 30 Hz，尚未测量 iPhone 帧率/耗电。
 - 饮水可配置目标和杯量，快捷追加、自定义、撤销、修改量/时间、按日查看和删除。第一次启动饮水为零，目标未设置，未写入概念图中的示例数据。
@@ -45,12 +46,13 @@ MIT 全文与改动说明保存在 `frontend/ios/App/App/Native/WaterThirdPartyN
 | WaterView.swift | 饮水历史、纠正、服用逐次确认和撤销 |
 | WellnessSettingsSheet.swift / WellnessNotifications.swift | 计划时点、杯量、真实授权和本地提醒 |
 | RootView.swift / GymStore.swift / BodyView.swift | 保留系统导航、跨日刷新与既有功能入口 |
+| NativeTabBarAnchor.swift | 读取公开底栏位置，为正中间凸起加号提供布局锚点 |
 
 ## 本轮证据
 
 | 检查 | 实际结果与范围 |
 |---|---|
-| Swift 语法树解析 | 22 个文件解析无 ERROR / missing node；不是 Swift 类型检查 |
+| Swift 语法树解析 | 本次独立快照中 23 个文件解析无 ERROR / missing node；不是 Swift 类型检查，也不包含其它任务未提交修改 |
 | Xcode 工程结构 | 对象 ID、全部 Native 源文件、Metal Sources、许可 Resources、Info.plist 均通过静态检查 |
 | 首页范围检查 | 源码中为系统 5 个 Tab，无首页日期选择/周历/称重/训练开始调用，无 WebView |
 | 水体运算预览 | 生产 Metal 代码作类型别名转换，在 Windows RTX 3060 的离屏 OpenGL context 编译并渲染；查看了 0/25/50/75/100%、两向倾斜和深色截图。发现并修正了过于规则的焦散格线 |
