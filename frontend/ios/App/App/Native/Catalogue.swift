@@ -23,6 +23,11 @@ enum Catalogue {
     ]
 
     static let exercises: [ExerciseInfo] = load()
+    static let musclesById: [String: [String: Double]] = {
+        var result: [String: [String: Double]] = [:]
+        for exercise in exercises { result[exercise.id] = exercise.muscles }
+        return result
+    }()
     static let byId: [String: ExerciseInfo] = {
         var index: [String: ExerciseInfo] = [:]
         for exercise in exercises { index[exercise.id] = exercise }
@@ -146,7 +151,9 @@ enum Catalogue {
               let data = try? Data(contentsOf: url),
               let records = try? JSONDecoder().decode([Record].self, from: data) else { return [] }
         return records.map {
-            ExerciseInfo(id: $0.id, name: $0.name, equipment: $0.equipment, bodyPart: $0.bodyPart, muscles: $0.muscles)
+            let metadata = WorkoutCatalogue.records[$0.id]
+            return ExerciseInfo(id: $0.id, name: metadata?.name ?? $0.name, equipment: metadata?.equipment ?? $0.equipment,
+                                bodyPart: metadata?.bodyPart ?? $0.bodyPart, muscles: $0.muscles)
         }
     }
 }

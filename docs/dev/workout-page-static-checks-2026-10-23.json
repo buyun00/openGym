@@ -1,0 +1,53 @@
+{
+  "scope": "Static Swift syntax / Xcode project / catalogue-media checks ONLY. NOT Swift typechecking, XCTest execution, Xcode compilation or iOS visual acceptance.",
+  "checks": {
+    "swift_syntax_only": true,
+    "project_object_identifiers": true,
+    "all_current_native_sources_registered": true,
+    "registered_swift_sources_exist": true,
+    "workout_metadata_bundled": true,
+    "actual_media_folder_bundled": true,
+    "media_source_path_resolves": true,
+    "media_notice_available_in_bundled_folder": true,
+    "metadata_covers_existing_native_ids": true,
+    "all_declared_media_files_exist": true,
+    "reference_treadmill_is_cardio_with_incline": true,
+    "native_glass_and_system_presentations": true,
+    "actual_native_video_playback": true,
+    "no_web_ui_or_screenshot_substitution": true
+  },
+  "swift_files_parsed": 15,
+  "syntax_errors": [],
+  "missing_build_sources": [],
+  "stale_build_sources": [],
+  "metadata_ids": 6554,
+  "missing_metadata_ids": [],
+  "media_errors": [],
+  "swift_tests_defined_but_not_executed": 11,
+  "unverified": [
+    "Swift typecheck and XCTest on a Swift host",
+    "Xcode 26+ simulator build",
+    "iPhone native Liquid Glass visuals and all interactions",
+    "background notification delivery and AVPlayer looping",
+    "Dynamic Type, VoiceOver, light/dark and orientation"
+  ],
+  "sha256": {
+    "frontend/ios/App/App/Native/WorkoutCatalogue.swift": "aa611f7deb84fd62eb0b1b11f795c1da0a2189d0f0d8851d82dc2966b3c2d45e",
+    "frontend/ios/App/App/Native/WorkoutExerciseCard.swift": "a46323e698cc9439144a91137527cfda9d24fc88fbbe08aa2834a9ea6ba1ece8",
+    "frontend/ios/App/App/Native/WorkoutExerciseOptions.swift": "b960a86bf8b0f1dddad7ed5ba101ec64dfb0f34f80ca94df918fbbc24a7ac543",
+    "frontend/ios/App/App/Native/WorkoutLogic.swift": "324cd41768f659f81ce8a79e2774ec2137e80b9d76be7195ee68d749cc2b6c1a",
+    "frontend/ios/App/App/Native/WorkoutMediaView.swift": "ab17fd3ed0fcc7042d418f17d106f43804d93b6979a1b6bcb5138a4ac744dbfd",
+    "frontend/ios/App/App/Native/WorkoutRestAlerts.swift": "7c6c3bb54e85795d85e33d1f76027108afa369bf026f7fb872bd7b15ced7bf0a",
+    "frontend/ios/App/App/Native/WorkoutSheets.swift": "e1f3fe31ec0f434c54cb7f846bed41de968f88f521487372d67981af55ff840c",
+    "frontend/ios/App/App/Native/WorkoutStore.swift": "a5c97b9337a0109b76f96b1851a7be40b7ddc324e1932813073b98343bbebfac",
+    "frontend/ios/App/App/Native/WorkoutView.swift": "dded1973ac1288cfe25918a77d6559e9dbcd9247c887db681fb03934cce56977",
+    "frontend/ios/App/App/Native/GymModels.swift": "300f73eda7a0faa801d9c3e8330f351cf2cc6fbd75998a536cd261ada1493395",
+    "frontend/ios/App/App/Native/GymStore.swift": "f5b100d348c799b35d19aa514a0dd78f94a17a4436f831dae0e0c167aeb6e416",
+    "frontend/ios/App/App/Native/Catalogue.swift": "589d4c6326b74ddf4990a3c4ae577e1b327a8c545b5380834b25951b6d5229ae",
+    "frontend/ios/App/App/Native/RoutineEditorView.swift": "f2171b4ce4f26aac0f78bc4092268f536ae5d90549fa3cb678ec6e160d612843",
+    "frontend/ios/Tests/WorkoutCoreTests/WorkoutCoreTests.swift": "c6eb3c5925293a90620a6730a95ea30a28396a9b7506031e6119729f0f52124f",
+    "frontend/ios/Package.swift": "47d5034d3ca5467ae0c11d332ff3a1e6d267b7737fd9052d1900182506a4378a",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj": "685664ea527c69afb0b20074edd12fea2b49a033e5db52e6f342a2f873d62c46",
+    "frontend/ios/App/App/Native/workout-catalogue.json": "c4c0072c20f75c41527b281d4f6d4eac5d5e99796f8a12d1124f445a7eb4e120"
+  }
+}

@@ -59,5 +59,25 @@
   "validation_base_commit": "941b1aa9d82648db7c8149021c169b813d30ce19",
   "validation_context": "Isolated committed baseline plus this motion/native-tab repair only. Excludes concurrent uncommitted Body/Water/Workout work; this is source wiring/syntax evidence, not iOS execution.",
   "swift_tests_authored": 19,
-  "swift_tests_executed": false
+  "swift_tests_executed": false,
+  "delivery_integration": {
+    "remote_parent": "7e154a747221c5b347666a92f52ee78a3e3d0f43",
+    "original_fix_commit": "40fe4bc2af642e247ca344ce10f4ba04ab3be04a",
+    "scope": "Rechecked the 7 modified Swift/Package files and merged Xcode Native references after retaining the remotely published signing, body, water and workout changes. Original 24-file report above remains the isolated baseline evidence. Not a Swift typecheck or runtime test.",
+    "modified_swift_syntax": true,
+    "native_build_references": true,
+    "referenced_native_files_exist": true,
+    "signing_settings_preserved": true,
+    "sha256": {
+      "frontend/ios/App/App/Native/RootView.swift": "4fbe9c673ec297a7c5fd4430350e1be4caca87d0a6d92f0a8d8035ef13f7ced0",
+      "frontend/ios/App/App/Native/WaterBackground.swift": "998ce451bb6ea1e762fb64896f854d62c31bf1041c8896f04c692b20eaa7a862",
+      "frontend/ios/App/App/Native/WaterMotion.swift": "a95b4a442e6626289f681d7eef37ac48f4950ac49fbd5d905496e32d2b24265c",
+      "frontend/ios/App/App/Native/WaterPhysics.swift": "08a5999fa9c277888c65bac84003459e1f1321e08900337d15fa8522b3fb0d0c",
+      "frontend/ios/App/App/SceneDelegate.swift": "3d4739c278e19c4fa50e04bcff671ec90ef795383a33d39c5c7ddd8faef22cd9",
+      "frontend/ios/Tests/WellnessCoreTests/WaterMotionTests.swift": "bdb9ea16d1873c162bef8bc884e772a4428c4d3caebc19ae7ba00ba9859edc63",
+      "scripts/ios/check-native-home.py": "dd47762d04fc505042927f6322774f74331c20625aa374b1694e83345887d38d",
+      "frontend/ios/App/App.xcodeproj/project.pbxproj": "3270150af605418135cbbd50f5e555d7d3d7c49489317ffe8f88de11e118910b",
+      "frontend/ios/Package.swift": "8e705e7b83a1f978742aa4227d571e9052e0df6413a6efb7769e1e0b9e2018dc"
+    }
+  }
 }

@@ -34,22 +34,23 @@ final class WellnessStore {
     }
 
     @discardableResult
-    func addWater(_ amount: Int, at date: Date = Date()) -> Bool {
+    func addWater(_ amount: Int, at date: Date = Date(), drink: DrinkKind = .water) -> Bool {
         let id = UUID()
         guard (1...5000).contains(amount), date <= Date() else { return false }
-        let saved = commit { _ = $0.addWater(amount, at: date, id: id) }
+        let saved = commit { _ = $0.addWater(amount, at: date, id: id, drink: drink) }
         if saved { lastAddedWaterID = id; now = Date() }
         return saved
     }
 
     @discardableResult
-    func editWater(_ id: UUID, amount: Int, date: Date) -> Bool {
+    func editWater(_ id: UUID, amount: Int, date: Date, drink: DrinkKind? = nil) -> Bool {
         guard (1...5000).contains(amount), date <= Date(), state.water.contains(where: { $0.id == id }) else { return false }
         return commit { value in
             guard let index = value.water.firstIndex(where: { $0.id == id }) else { return }
             value.water[index].milliliters = amount
             value.water[index].date = date
             value.water[index].day = WellnessDay.key(date)
+            if let drink { value.water[index].drink = drink }
         }
     }
 

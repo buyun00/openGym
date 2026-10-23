@@ -21,11 +21,48 @@ enum WellnessDay {
     }
 }
 
+enum DrinkKind: String, Codable, CaseIterable, Identifiable {
+    case water, tea, coffee, milk, juice, soda, other
+
+    var id: String { rawValue }
+    var name: String {
+        switch self {
+        case .water: return "水"
+        case .tea: return "茶"
+        case .coffee: return "咖啡"
+        case .milk: return "牛奶"
+        case .juice: return "果汁"
+        case .soda: return "汽水"
+        case .other: return "其他"
+        }
+    }
+}
+
 struct WaterEntry: Codable, Identifiable, Equatable {
     var id = UUID()
     var date: Date
     var day: String
     var milliliters: Int
+    var drink: DrinkKind = .water
+
+    enum CodingKeys: String, CodingKey { case id, date, day, milliliters, drink }
+}
+
+extension WaterEntry {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        date = try values.decode(Date.self, forKey: .date)
+        day = try values.decode(String.self, forKey: .day)
+        milliliters = try values.decode(Int.self, forKey: .milliliters)
+        // Version 1 archives predate drink selection. Missing means plain water;
+        // an unknown future category stays readable as Other without losing the amount.
+        if let raw = try values.decodeIfPresent(String.self, forKey: .drink) {
+            drink = DrinkKind(rawValue: raw) ?? .other
+        } else {
+            drink = .water
+        }
+    }
 }
 
 struct ClockTime: Codable, Equatable, Hashable {
@@ -132,9 +169,10 @@ struct WellnessState: Codable, Equatable {
 
     func record(for instance: DoseInstance) -> DoseRecord? { doses.first { $0.id == instance.id } }
 
-    mutating func addWater(_ milliliters: Int, at date: Date, id: UUID = UUID(), calendar: Calendar = .current) -> UUID? {
+    mutating func addWater(_ milliliters: Int, at date: Date, id: UUID = UUID(), calendar: Calendar = .current,
+                          drink: DrinkKind = .water) -> UUID? {
         guard (1...5000).contains(milliliters), !water.contains(where: { $0.id == id }) else { return nil }
-        water.append(WaterEntry(id: id, date: date, day: WellnessDay.key(date, calendar: calendar), milliliters: milliliters))
+        water.append(WaterEntry(id: id, date: date, day: WellnessDay.key(date, calendar: calendar), milliliters: milliliters, drink: drink))
         return id
     }
 
