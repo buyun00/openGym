@@ -30,6 +30,7 @@ import {
   listPasskeys, addPasskeyRecord, renamePasskeyRecord, removePasskeyRecord, passkeyRemovalRefused, MAX_PASSKEYS
 } from './passkeys-store.js';
 import { createDeviceLink, findDeviceLink, burnDeviceLink, dropDeviceLinks } from './device-link.js';
+import { personalSession } from './ios-personal.js';
 import { createMediaStore, mediaLimits, mediaConfig, MediaError, HASH_RE } from './media.js';
 import { effectiveRoutineId } from './queue.js';
 import { stampPut } from './sync-stamps.js';
@@ -602,6 +603,7 @@ function sessionOf(req) {
   if (!tok) return null;
   const payload = verifySig(tok);
   if (!payload) return null;
+  if (payload.startsWith('ios:')) return personalSession(req, payload, db.users, !cookie);
   const [uid, exp, ver] = payload.split(':');
   if (!uid || +exp < Date.now()) return null;
   const user = db.users.find(u => u.id === uid) || null;
@@ -1999,8 +2001,8 @@ const routes = {
     const s = sessionOf(req);
     if (!s) return json(res, 401, { error: 'not signed in' });
     const { user } = s;
-    const renew = s.bearer && s.exp - Date.now() < SESSION_DAYS * 86400000 / 2;
-    json(res, 200, { user: { id: user.id, name: user.name, admin: isAdmin(user) }, ...(renew ? { token: makeSession(user) } : {}) });
+    const renew = s.bearer && !s.personal && s.exp - Date.now() < SESSION_DAYS * 86400000 / 2;
+    json(res, 200, { user: { id: user.id, name: user.name, admin: !s.personal && isAdmin(user) }, ...(renew ? { token: makeSession(user) } : {}) });
   },
 
   'POST /api/register/options': async (req, res) => {

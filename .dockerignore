@@ -3,5 +3,7 @@ frontend/dist
 media
 data
 .env
+frontend/ios/App/Private
+deploy-backups
 .git
 *.log

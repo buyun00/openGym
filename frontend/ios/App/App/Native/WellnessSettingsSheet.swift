@@ -17,7 +17,7 @@ struct WellnessSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("网页账户") {
+                Section("数据同步") {
                     NavigationLink { GymConnectionView() } label: {
                         Label(store.cloud.status, systemImage: "icloud")
                     }

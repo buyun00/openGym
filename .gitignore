@@ -8,6 +8,9 @@ data/
 
 # Local config
 .env
+# Per-installation iOS credential. Retrieve over SSH; never commit or publish it.
+frontend/ios/App/Private/
+deploy-backups/
 
 # Build output / deps
 frontend/dist/

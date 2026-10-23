@@ -27,7 +27,7 @@ private enum GymKeychain {
         let status = SecItemCopyMatching(q as CFDictionary, &value)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = value as? Data else {
-            throw GymSyncError(message: "暂时无法读取账户凭据，请解锁设备后重试。")
+            throw GymSyncError(message: "暂时无法读取连接凭据，请解锁设备后重试。")
         }
         return try JSONDecoder().decode(GymConnection.self, from: data)
     }
@@ -38,9 +38,9 @@ private enum GymKeychain {
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             guard SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil) == errSecSuccess else {
-                throw GymSyncError(message: "账户凭据未能安全保存，请重试。")
+                throw GymSyncError(message: "连接凭据未能安全保存，请重试。")
             }
-        } else if status != errSecSuccess { throw GymSyncError(message: "账户凭据未能安全保存，请重试。") }
+        } else if status != errSecSuccess { throw GymSyncError(message: "连接凭据未能安全保存，请重试。") }
     }
 }
 
@@ -54,9 +54,8 @@ private final class GymNoRedirect: NSObject, URLSessionTaskDelegate, @unchecked 
 @Observable
 final class GymCloudSync {
     static let defaultServer = "https://h3.lin0.org/gym"
-    var accountName = ""
     var server = defaultServer
-    var status = "尚未连接网页账户"
+    var status = "正在连接个人数据"
     var errorMessage: String?
     var busy = false
     var connected = false
@@ -86,14 +85,29 @@ final class GymCloudSync {
     var ownsCache: Bool { connection != nil && cache != nil }
 
     func restore(into store: GymStore) {
+        storageError = nil
         do {
-            connection = try GymKeychain.load()
+            let savedConnection = try GymKeychain.load()
+            guard let url = Bundle.main.url(forResource: "GymPersonalConnection", withExtension: "json") else {
+                throw GymSyncError(message: "安装包缺少个人连接配置，请在 Xcode 配置后重新安装。")
+            }
+            var personal = try JSONDecoder().decode(GymConnection.self, from: Data(contentsOf: url))
+            personal.base = try Self.normalize(personal.base)
+            guard !personal.userID.isEmpty, personal.token.hasPrefix("ios:") else {
+                throw GymSyncError(message: "安装包的个人连接配置无效，请重新配置后安装。")
+            }
+            if let savedConnection, savedConnection.userID != personal.userID || savedConnection.base != personal.base {
+                throw GymSyncError(message: "连接配置与本机数据来源不一致，已保留原文件，未上传。")
+            }
+            // The private build configuration also replaces a revoked credential on reinstall.
+            try GymKeychain.save(personal)
+            connection = personal
             if let connection {
-                connected = true; accountName = connection.name; server = connection.base
+                connected = true; server = connection.base
                 if FileManager.default.fileExists(atPath: cacheURL.path) {
                     let saved = try JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL))
                     guard saved.userID == connection.userID, saved.base == connection.base else {
-                        throw GymSyncError(message: "本机缓存属于另一个账户，已保留原文件，未上传。")
+                        throw GymSyncError(message: "本机缓存与连接配置不一致，已保留原文件，未上传。")
                     }
                     cache = saved; store.apply(snapshot: saved.local); lastSync = saved.syncedAt
                 }
@@ -114,30 +128,8 @@ final class GymCloudSync {
         return value
     }
 
-    func connect(server text: String, code: String, store: GymStore) async {
-        guard !busy else { return }
-        busy = true; errorMessage = nil; status = "正在连接网页账户"
-        defer { busy = false }
-        do {
-            let base = try Self.normalize(text)
-            let response = try await request(base: base, path: "/api/pair/redeem", token: nil,
-                                             body: ["code": code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()])
-            guard let token = response["token"] as? String, !token.isEmpty,
-                  let user = response["user"] as? [String: Any], let id = user["id"] as? String else {
-                throw GymSyncError(message: "配对响应不完整，未修改本机记录。")
-            }
-            if let previous = connection, previous.userID != id || previous.base != base {
-                throw GymSyncError(message: "请使用当前网页账户配对。本机仍有原账户缓存，未混入其他账户。")
-            }
-            let next = GymConnection(base: base, token: token, userID: id, name: user["name"] as? String ?? "网页账户")
-            try GymKeychain.save(next)
-            connection = next; connected = true; server = base; accountName = next.name
-            try await exchange(store: store)
-        } catch { errorMessage = error.localizedDescription; status = "尚未完成同步" }
-    }
-
     func persistLocal(_ snapshot: GymStore.Snapshot) throws {
-        guard var next = cache else { throw GymSyncError(message: "尚未下载网页账户数据。") }
+        guard var next = cache else { throw GymSyncError(message: "尚未下载网页数据。") }
         next.local = snapshot
         try persist(next)
         status = "本机已保存，等待同步"
@@ -155,7 +147,9 @@ final class GymCloudSync {
     }
 
     func sync(store: GymStore) async {
-        guard connection != nil, !busy else { return }
+        guard !busy else { return }
+        if connection == nil || storageError != nil { restore(into: store) }
+        guard connection != nil else { return }
         busy = true; errorMessage = nil; status = "正在同步"
         defer { busy = false }
         do { try await exchange(store: store) }
@@ -167,7 +161,7 @@ final class GymCloudSync {
         guard var auth = connection else { return }
         let me = try await request(base: auth.base, path: "/api/me", token: auth.token)
         guard let user = me["user"] as? [String: Any], user["id"] as? String == auth.userID else {
-            throw GymSyncError(message: "服务器账户与本机绑定不一致，未上传。")
+            throw GymSyncError(message: "服务器返回的数据来源与连接配置不一致，未上传。")
         }
         if let token = me["token"] as? String { auth.token = token; try GymKeychain.save(auth); connection = auth }
         // Revision races are bounded. Each retry fetches the latest state and repeats the
@@ -277,7 +271,7 @@ final class GymCloudSync {
     }
     private func state(from response: [String: Any]) throws -> [String: Any] {
         if response["state"] is NSNull { return ["unit": "kg", "routines": [], "workouts": [], "bodyweight": [], "measurements": []] }
-        guard let state = response["state"] as? [String: Any] else { throw GymSyncError(message: "服务器没有返回账户数据。") }
+        guard let state = response["state"] as? [String: Any] else { throw GymSyncError(message: "服务器没有返回个人数据。") }
         for key in ["routines", "workouts", "bodyweight", "measurements"] {
             if let value = state[key], !(value is NSNull), !(value is [Any]) { throw GymSyncError(message: "服务器记录格式异常，未上传。") }
         }
@@ -294,8 +288,8 @@ final class GymCloudSync {
         let (bytes, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw GymSyncError(message: "服务器没有响应。") }
         if http.statusCode == 409 && allowConflict { return ["conflict": true] }
-        if http.statusCode == 401 || http.statusCode == 403 { throw GymSyncError(message: "账户连接已失效，请从网页重新获取配对码。本机记录已保留。") }
-        guard (200..<300).contains(http.statusCode) else { throw GymSyncError(message: "服务器返回 HTTP \(http.statusCode)。请检查地址或重新获取配对码。") }
+        if http.statusCode == 401 || http.statusCode == 403 { throw GymSyncError(message: "个人连接凭据已失效，请更新安装包中的连接配置。本机记录已保留。") }
+        guard (200..<300).contains(http.statusCode) else { throw GymSyncError(message: "服务器返回 HTTP \(http.statusCode)，请稍后重试。") }
         return try object(bytes)
     }
 }
