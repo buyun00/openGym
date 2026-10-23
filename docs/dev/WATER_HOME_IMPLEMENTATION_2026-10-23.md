@@ -2,6 +2,14 @@
 
 本轮已完成本地源码实现，尚未完成 iOS 编译和真机验收。基线 `71ac9f52`，继续原 `main` checkout；按用户后续授权提交源码，由用户在另一台电脑打包，本轮不构建或发布安装包。原有调研文档与批准概念图未改动。
 
+## 2026-10-23 用户截图反馈修正
+
+在当前 `94f4d351` 基线上修正，保留已有图标提交。用户截图显示已记录 1000 mL、目标尚未设置、背景没有水，以及“开始”仍是普通播放图标。
+
+- “开始”移至系统 Tab 栏尾部，使用独立的加号入口，仍打开既有 WorkoutView，保留训练进行中的徽标。Xcode 27 / iOS 27 使用 `TabRole.prominent`；Xcode 26 / iOS 26 使用系统 `.search` 独立位置并显式指定“开始”/`plus`，不附加搜索框。兼容分支有编译器和系统版本保护，没有自绘 Tab 栏。系统将独立入口放在右侧，不承诺旧 Web 版的中央凸起布局。依据：[Apple TabRole.prominent](https://developer.apple.com/documentation/swiftui/tabrole/prominent)、[SwiftUI 更新说明](https://developer.apple.com/documentation/updates/swiftui)、[Xcode / Swift 版本表](https://developer.apple.com/xcode/system-requirements)。
+- 原因是 `progress` 在未设目标时返回 0，首页又将它直接作为水位。现将目标完成率与水位分开：未设目标时，以界面明确标注的 2000 mL 满刻度显示实际饮水量；1000 mL 对应半屏，0 mL 仍为空。这个刻度不写入每日目标，也不作为提醒取消条件。设置目标后水位沿用用户目标，超过刻度时水位最多满屏，实际 mL 保持不变。
+- 添加两项 XCTest 回归案例，覆盖截图的 1000 mL / 无目标、超刻度、撤销、跨日、提醒不被误取消、设置/更改/清除目标和记录保持。Windows 静态语法与工程检查已重新通过；新增 Swift 测试仍未执行，独立加号的布局/点击/VoiceOver 与修正后水体仍待 Mac / iPhone 验证。未改动 shader，因此没有重复生成或冒充新的原生效果图。
+
 ## 已实现的源码
 
 - 首页只保留今日训练、今日饮水和今日服用。训练为只读摘要，继续使用底部“开始”；首页没有日期选择、周历、称重入口或第二个开始按钮。
@@ -46,9 +54,9 @@ MIT 全文与改动说明保存在 `frontend/ios/App/App/Native/WaterThirdPartyN
 | Xcode 工程结构 | 对象 ID、全部 Native 源文件、Metal Sources、许可 Resources、Info.plist 均通过静态检查 |
 | 首页范围检查 | 源码中为系统 5 个 Tab，无首页日期选择/周历/称重/训练开始调用，无 WebView |
 | 水体运算预览 | 生产 Metal 代码作类型别名转换，在 Windows RTX 3060 的离屏 OpenGL context 编译并渲染；查看了 0/25/50/75/100%、两向倾斜和深色截图。发现并修正了过于规则的焦散格线 |
-| 10 项 Swift XCTest | 已加入，覆盖空初始数据、跨日、B/D 去重、每周改日、原子存取/纠正/撤销、损坏文件保留、提醒取消、DST/跨年、截面体积、弹簧衰减。当前没有 Swift 工具链，**未执行** |
+| 12 项 Swift XCTest | 已加入，覆盖无目标时水量可见、目标切换与提醒独立、空初始数据、跨日、B/D 去重、每周改日、原子存取/纠正/撤销、损坏文件保留、提醒取消、DST/跨年、截面体积、弹簧衰减。当前没有 Swift 工具链，**未执行** |
 | iOS / Metal 编译 | **未执行**：Windows 无 Xcode，未获得可用 Mac 入口 |
-| iPhone 视觉/交互/性能 | **未执行**：无原生运行截图、重力方向真机证据、帧率、耗电或热测试 |
+| iPhone 视觉/交互/性能 | 用户已提供旧版问题截图；**修正后未验证**，无新版原生运行截图、重力方向真机证据、帧率、耗电或热测试 |
 
 静态检查及源码 SHA-256：[water-home-static-checks-2026-10-23.json](water-home-static-checks-2026-10-23.json)。
 

@@ -20,6 +20,7 @@ final class WellnessStore {
 
     var todayWater: Int { state.waterTotal(on: now) }
     var progress: Double { state.progress(on: now) }
+    var waterFill: Double { state.waterFill(on: now) }
 
     func refreshTime() {
         let previous = WellnessDay.key(now)

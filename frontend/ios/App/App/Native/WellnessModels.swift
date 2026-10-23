@@ -110,6 +110,14 @@ struct WellnessState: Codable, Equatable {
         return Double(waterTotal(on: date, calendar: calendar)) / Double(goal)
     }
 
+    // A visual measuring scale, never an assumed daily goal or a reminder threshold.
+    // Without a goal, recorded water must still be visible. The home labels this scale explicitly.
+    var waterScaleML: Int { settings.waterGoalML ?? 2000 }
+
+    func waterFill(on date: Date, calendar: Calendar = .current) -> Double {
+        min(1, max(0, Double(waterTotal(on: date, calendar: calendar)) / Double(waterScaleML)))
+    }
+
     func instances(for supplement: Supplement, on date: Date, calendar: Calendar = .current) -> [DoseInstance] {
         if supplement == .b {
             return (0..<3).map { slot in

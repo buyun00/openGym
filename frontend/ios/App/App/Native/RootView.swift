@@ -14,16 +14,16 @@ struct RootView: View {
             Tab("计划", systemImage: "calendar", value: AppTab.plan) {
                 PlanView()
             }
-            Tab("开始", systemImage: "play.fill", value: AppTab.workout) {
-                WorkoutView()
-            }
-            .badge(store.active.map { _ in Text("练") })
             Tab("身体", systemImage: "figure.strengthtraining.traditional", value: AppTab.body) {
                 BodyView()
             }
             Tab("喝水", systemImage: "drop", value: AppTab.water) {
                 WaterView()
             }
+            Tab("开始", systemImage: "plus", value: AppTab.workout, role: workoutTabRole) {
+                WorkoutView()
+            }
+            .badge(store.active.map { _ in Text("练") })
         }
         .environment(store)
         .tabBarMinimizeBehavior(.onScrollDown)
@@ -46,5 +46,15 @@ struct RootView: View {
         } message: {
             Text(store.wellness.errorMessage ?? "")
         }
+    }
+
+    private var workoutTabRole: TabRole {
+        // Xcode 27 adds the semantic prominent role. Keep Xcode 26 buildable.
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) { return .prominent }
+        #endif
+        // iOS 26 exposes its detached circular tab through the search role.
+        // The explicit label/image preserve the workout identity; no searchable field is attached.
+        return .search
     }
 }

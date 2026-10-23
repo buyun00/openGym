@@ -13,7 +13,7 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                WaterBackground(progress: wellness.progress, active: store.tab == .today && !showSettings && !showWaterEntry && selectedSupplement == nil)
+                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && !showWaterEntry && selectedSupplement == nil)
                 ScrollView {
                     VStack(spacing: 20) {
                         workoutSummary
@@ -82,6 +82,8 @@ struct TodayView: View {
                     Text("已超过目标 \(wellness.todayWater - goal) mL").font(.caption)
                 }
             } else {
+                Text("未设目标 · 水位满刻度 \(wellness.state.waterScaleML) mL")
+                    .font(.subheadline).foregroundStyle(.secondary)
                 Button("设置每日饮水目标", systemImage: "slider.horizontal.3") { showSettings = true }
                     .buttonStyle(.glass)
             }

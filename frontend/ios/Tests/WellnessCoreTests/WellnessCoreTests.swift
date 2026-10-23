@@ -16,10 +16,55 @@ final class WellnessCoreTests: XCTestCase {
         XCTAssertTrue(state.water.isEmpty)
         XCTAssertTrue(state.doses.isEmpty)
         XCTAssertEqual(state.progress(on: Date()), 0)
+        XCTAssertEqual(state.waterFill(on: Date()), 0)
         XCTAssertFalse(state.settings.waterReminders)
         XCTAssertFalse(state.settings.supplementReminders)
         XCTAssertEqual(state.instances(for: .b, on: Date()).count, 3)
         XCTAssertTrue(state.instances(for: .d, on: Date()).isEmpty)
+    }
+
+    func testRecordedWaterIsVisibleBeforeAGoalIsSet() throws {
+        let now = date("2026-10-23T13:00:00+08:00")
+        let tomorrow = date("2026-10-24T13:00:00+08:00")
+        var state = WellnessState()
+        state.settings.waterReminders = true
+        let before = WellnessReminderPlan.make(state: state, now: now, calendar: calendar)
+        let first = try XCTUnwrap(state.addWater(1000, at: now, calendar: calendar))
+        XCTAssertEqual(state.waterTotal(on: now, calendar: calendar), 1000)
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(state.waterScaleML, 2000)
+        XCTAssertNil(state.settings.waterGoalML)
+        XCTAssertEqual(state.progress(on: now, calendar: calendar), 0)
+        XCTAssertEqual(state.waterFill(on: tomorrow, calendar: calendar), 0)
+        XCTAssertEqual(WellnessReminderPlan.make(state: state, now: now, calendar: calendar), before)
+
+        let next = try XCTUnwrap(state.addWater(1500, at: now, calendar: calendar))
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 1)
+        XCTAssertEqual(state.waterTotal(on: now, calendar: calendar), 2500)
+        XCTAssertNil(state.settings.waterGoalML)
+        // A full visual scale must not suppress reminders as though a goal were achieved.
+        XCTAssertEqual(WellnessReminderPlan.make(state: state, now: now, calendar: calendar), before)
+        state.water.removeAll { $0.id == next }
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 0.5, accuracy: 0.0001)
+        state.water.removeAll { $0.id == first }
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 0)
+    }
+
+    func testWaterScaleFollowsGoalChangesWithoutChangingRecords() {
+        let now = date("2026-10-23T13:00:00+08:00")
+        var state = WellnessState()
+        _ = state.addWater(1000, at: now, calendar: calendar)
+        let entries = state.water
+        state.settings.waterGoalML = 4000
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 0.25, accuracy: 0.0001)
+        XCTAssertEqual(state.progress(on: now, calendar: calendar), 0.25, accuracy: 0.0001)
+        XCTAssertEqual(state.waterScaleML, 4000)
+        state.settings.waterGoalML = 500
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 1)
+        XCTAssertEqual(state.progress(on: now, calendar: calendar), 2)
+        state.settings.waterGoalML = nil
+        XCTAssertEqual(state.waterFill(on: now, calendar: calendar), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(state.water, entries)
     }
 
     func testMidnightArchivesWaterAndRejectsOldDoseSheet() {
