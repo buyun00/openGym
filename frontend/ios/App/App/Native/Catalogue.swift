@@ -23,6 +23,11 @@ enum Catalogue {
     ]
 
     static let exercises: [ExerciseInfo] = load()
+    static let musclesById: [String: [String: Double]] = {
+        var result: [String: [String: Double]] = [:]
+        for exercise in exercises { result[exercise.id] = exercise.muscles }
+        return result
+    }()
     static let byId: [String: ExerciseInfo] = {
         var index: [String: ExerciseInfo] = [:]
         for exercise in exercises { index[exercise.id] = exercise }

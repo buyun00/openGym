@@ -10,6 +10,8 @@ final class GymStore {
     var workouts: [WorkoutSession] = []
     var active: WorkoutSession?
     var weighIns: [WeighIn] = []
+    var bodyMeasurements: [BodyMeasurement] = []
+    var saveError: String?
     var targetKg: Double?
     var restSeconds: Int = 90
     var ownedEquipment: [String] = []
@@ -22,6 +24,7 @@ final class GymStore {
         var workouts: [WorkoutSession] = []
         var active: WorkoutSession?
         var weighIns: [WeighIn] = []
+        var bodyMeasurements: [BodyMeasurement]?
         var targetKg: Double?
         var restSeconds: Int = 90
         var ownedEquipment: [String] = []
@@ -226,8 +229,9 @@ final class GymStore {
     func clearRest() { restEndsAt = nil }
 
     func deleteWorkout(_ id: UUID) {
+        let previous = workouts
         workouts.removeAll { $0.id == id }
-        save()
+        if !save() { workouts = previous }
     }
 
     @discardableResult
@@ -284,22 +288,68 @@ final class GymStore {
         save()
     }
 
-    func addWeighIn(kilograms: Double, date: Date) {
+    @discardableResult
+    func addWeighIn(kilograms: Double, date: Date, bodyFatPercent: Double? = nil, keepExistingBodyFat: Bool = true) -> Bool {
+        guard kilograms.isFinite, kilograms > 0, kilograms < 500 else { return false }
+        let previous = weighIns
         let day = Calendar.current.startOfDay(for: date)
+        let existing = weighIns.first { Calendar.current.isDate($0.date, inSameDayAs: day) }
         weighIns.removeAll { Calendar.current.isDate($0.date, inSameDayAs: day) }
-        weighIns.append(WeighIn(id: UUID(), date: day, kilograms: kilograms))
+        let fat = bodyFatPercent.flatMap { $0.isFinite && $0 > 0 && $0 < 100 ? $0 : nil }
+        weighIns.append(WeighIn(id: existing?.id ?? UUID(), date: day, kilograms: kilograms,
+                               bodyFatPercent: fat ?? (keepExistingBodyFat ? existing?.bodyFatPercent : nil)))
         weighIns.sort { $0.date < $1.date }
-        save()
+        guard save() else { weighIns = previous; return false }
+        return true
     }
 
     func deleteWeighIn(_ id: UUID) {
+        let previous = weighIns
         weighIns.removeAll { $0.id == id }
-        save()
+        if !save() { weighIns = previous }
+    }
+
+    @discardableResult
+    func addMeasurement(date: Date, centimeters: [String: Double]) -> Bool {
+        let valid = centimeters.filter { BodyMeasurement.fields.contains($0.key) && $0.value.isFinite && $0.value > 0 && $0.value < 300 }
+        guard !valid.isEmpty else { return false }
+        let previous = bodyMeasurements
+        let day = Calendar.current.startOfDay(for: date)
+        if let index = bodyMeasurements.firstIndex(where: { Calendar.current.isDate($0.date, inSameDayAs: day) }) {
+            bodyMeasurements[index].centimeters = valid
+        } else {
+            bodyMeasurements.append(BodyMeasurement(id: UUID(), date: day, centimeters: valid))
+        }
+        guard save() else { bodyMeasurements = previous; return false }
+        return true
+    }
+
+    func deleteMeasurement(_ id: UUID) {
+        let previous = bodyMeasurements
+        bodyMeasurements.removeAll { $0.id == id }
+        if !save() { bodyMeasurements = previous }
+    }
+
+    func setRIR(workout workoutId: UUID? = nil, exercise exerciseId: UUID, set setId: UUID, value: Int?) {
+        let valid = value.flatMap { (0...10).contains($0) ? $0 : nil }
+        if let workoutId {
+            guard let wi = workouts.firstIndex(where: { $0.id == workoutId && $0.finishedAt != nil }),
+                  let ei = workouts[wi].exercises.firstIndex(where: { $0.id == exerciseId }),
+                  let si = workouts[wi].exercises[ei].sets.firstIndex(where: { $0.id == setId && $0.done }) else { return }
+            let previous = workouts[wi].exercises[ei].sets[si].rir
+            workouts[wi].exercises[ei].sets[si].rir = valid
+            if !save() { workouts[wi].exercises[ei].sets[si].rir = previous }
+        } else {
+            let previous = active
+            updateSet(exercise: exerciseId, set: setId) { $0.rir = valid }
+            if saveError != nil { active = previous }
+        }
     }
 
     func setTarget(_ kilograms: Double?) {
+        let previous = targetKg
         targetKg = kilograms
-        save()
+        if !save() { targetKg = previous }
     }
 
     func setRest(_ seconds: Int) {
@@ -348,7 +398,7 @@ final class GymStore {
 
     func historyExercises() -> [HistoryExercise] {
         var seen: [String: String] = [:]
-        for session in workouts.sorted(by: { $0.startedAt > $1.startedAt }) {
+        for session in workouts.sorted(by: { $0.startedAt > $1.startedAt }) where session.finishedAt != nil {
             for exercise in session.exercises where seen[exercise.exerciseId] == nil {
                 seen[exercise.exerciseId] = exercise.name
             }
@@ -433,13 +483,15 @@ final class GymStore {
         workouts = snapshot.workouts
         active = snapshot.active
         weighIns = snapshot.weighIns
+        bodyMeasurements = snapshot.bodyMeasurements ?? []
         targetKg = snapshot.targetKg
         restSeconds = min(300, max(15, snapshot.restSeconds))
         ownedEquipment = snapshot.ownedEquipment
         normalizeWeek()
     }
 
-    private func save() {
+    @discardableResult
+    private func save() -> Bool {
         normalizeWeek()
         let snapshot = Snapshot(
             routines: routines,
@@ -447,12 +499,20 @@ final class GymStore {
             workouts: workouts,
             active: active,
             weighIns: weighIns,
+            bodyMeasurements: bodyMeasurements,
             targetKg: targetKg,
             restSeconds: restSeconds,
             ownedEquipment: ownedEquipment
         )
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(snapshot)
+            try data.write(to: fileURL, options: .atomic)
+            saveError = nil
+            return true
+        } catch {
+            saveError = "无法保存到此设备：\(error.localizedDescription)"
+            return false
+        }
     }
 
     private func normalizeWeek() {

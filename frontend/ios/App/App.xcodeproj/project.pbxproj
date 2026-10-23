@@ -42,6 +42,12 @@
 		A2100000000000000000000B /* NativeTabBarAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* NativeTabBarAnchor.swift */; };
 		A21000000000000000000009 /* WaterScene.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* WaterScene.metal */; };
 		A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* WaterThirdPartyNotices.txt */; };
+		A31000000000000000000001 /* BodyAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* BodyAnalytics.swift */; };
+		A31000000000000000000002 /* BodyCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000002 /* BodyCalendarView.swift */; };
+		A31000000000000000000003 /* BodyEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000003 /* BodyEntrySheet.swift */; };
+		A31000000000000000000004 /* BodyMuscleMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000004 /* BodyMuscleMap.swift */; };
+		A31000000000000000000005 /* BodyRecordsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000005 /* BodyRecordsSection.swift */; };
+		A31000000000000000000006 /* BodyMapNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000006 /* BodyMapNotices.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -84,6 +90,12 @@
 		A2000000000000000000000B /* NativeTabBarAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarAnchor.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* WaterScene.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WaterScene.metal; sourceTree = "<group>"; };
 		A2000000000000000000000A /* WaterThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = WaterThirdPartyNotices.txt; sourceTree = "<group>"; };
+		A30000000000000000000001 /* BodyAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyAnalytics.swift; sourceTree = "<group>"; };
+		A30000000000000000000002 /* BodyCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyCalendarView.swift; sourceTree = "<group>"; };
+		A30000000000000000000003 /* BodyEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyEntrySheet.swift; sourceTree = "<group>"; };
+		A30000000000000000000004 /* BodyMuscleMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyMuscleMap.swift; sourceTree = "<group>"; };
+		A30000000000000000000005 /* BodyRecordsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BodyRecordsSection.swift; sourceTree = "<group>"; };
+		A30000000000000000000006 /* BodyMapNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BodyMapNotices.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +166,12 @@
 				A10000000000000000000006 /* PlanView.swift */,
 				A10000000000000000000007 /* WorkoutView.swift */,
 				A10000000000000000000008 /* BodyView.swift */,
+				A30000000000000000000006 /* BodyMapNotices.txt */,
+				A30000000000000000000005 /* BodyRecordsSection.swift */,
+				A30000000000000000000004 /* BodyMuscleMap.swift */,
+				A30000000000000000000003 /* BodyEntrySheet.swift */,
+				A30000000000000000000002 /* BodyCalendarView.swift */,
+				A30000000000000000000001 /* BodyAnalytics.swift */,
 				A10000000000000000000009 /* WaterView.swift */,
 				A1000000000000000000000A /* LibraryView.swift */,
 				A1000000000000000000000B /* EquipmentView.swift */,
@@ -254,6 +272,7 @@
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				A2100000000000000000000A /* WaterThirdPartyNotices.txt in Resources */,
 				A1000000000000000000001D /* exercises.json in Resources */,
+				A31000000000000000000006 /* BodyMapNotices.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -322,6 +341,11 @@
 				A10000000000000000000016 /* PlanView.swift in Sources */,
 				A10000000000000000000017 /* WorkoutView.swift in Sources */,
 				A10000000000000000000018 /* BodyView.swift in Sources */,
+				A31000000000000000000005 /* BodyRecordsSection.swift in Sources */,
+				A31000000000000000000004 /* BodyMuscleMap.swift in Sources */,
+				A31000000000000000000003 /* BodyEntrySheet.swift in Sources */,
+				A31000000000000000000002 /* BodyCalendarView.swift in Sources */,
+				A31000000000000000000001 /* BodyAnalytics.swift in Sources */,
 				A10000000000000000000019 /* WaterView.swift in Sources */,
 				A1000000000000000000001A /* LibraryView.swift in Sources */,
 				A1000000000000000000001B /* EquipmentView.swift in Sources */,

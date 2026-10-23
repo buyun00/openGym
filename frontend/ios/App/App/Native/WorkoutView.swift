@@ -27,6 +27,12 @@ struct WorkoutView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) { bottomBar }
+            .alert("记录未保存", isPresented: Binding(
+                get: { store.saveError != nil },
+                set: { if !$0 { store.saveError = nil } }
+            )) {
+                Button("好") { store.saveError = nil }
+            } message: { Text(store.saveError ?? "") }
             .confirmationDialog("结束并保存这次训练？", isPresented: $showFinish, titleVisibility: .visible) {
                 Button("保存") { store.finishActive() }
                 Button("取消", role: .cancel) {}
@@ -139,6 +145,18 @@ struct WorkoutView: View {
             }
             Stepper(value: repsBinding(exercise.id, set.id, fallback: set.reps), in: 0...100) {
                 Text("次数 \(set.reps)")
+            }
+            if set.done {
+                Picker("强度 RIR", selection: Binding<Int?>(
+                    get: { liveSet(exercise.id, set.id)?.rir },
+                    set: { store.setRIR(exercise: exercise.id, set: set.id, value: $0) }
+                )) {
+                    Text("未记录").tag(Int?.none)
+                    ForEach(0...10, id: \.self) { value in
+                        Text("还能做 \(value) 次").tag(Optional(value))
+                    }
+                }
+                .pickerStyle(.menu)
             }
         }
         .padding(.vertical, 4)

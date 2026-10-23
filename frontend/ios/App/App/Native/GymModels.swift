@@ -23,6 +23,8 @@ struct WorkoutSet: Codable, Identifiable, Hashable {
     var weight: Double
     var reps: Int
     var done: Bool
+    // Nil means unrecorded, never zero effort. Optional for older gym-state.json files.
+    var rir: Int? = nil
 }
 
 struct WorkoutExercise: Codable, Identifiable, Hashable {
@@ -44,6 +46,20 @@ struct WeighIn: Codable, Identifiable, Hashable {
     var id: UUID
     var date: Date
     var kilograms: Double
+    var bodyFatPercent: Double? = nil
+
+    var leanKilograms: Double? {
+        guard let fat = bodyFatPercent, fat > 0, fat < 100 else { return nil }
+        return kilograms * (1 - fat / 100)
+    }
+}
+
+struct BodyMeasurement: Codable, Identifiable, Hashable {
+    var id: UUID
+    var date: Date
+    var centimeters: [String: Double]
+
+    static let fields = ["胸围", "腰围", "臀围", "上臂围", "大腿围", "小腿围"]
 }
 
 struct DayPlan: Codable, Hashable {

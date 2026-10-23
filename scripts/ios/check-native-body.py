@@ -1,0 +1,99 @@
+"""Static iOS body-page checks. This is not a Swift typecheck or an iOS UI test.
+
+Requires tree-sitter==0.26.0, tree-sitter-swift==0.7.4, openstep-parser==2.0.3.
+"""
+from pathlib import Path
+import hashlib
+import json
+import re
+import sys
+import xml.etree.ElementTree as ET
+import tree_sitter
+import tree_sitter_swift
+from openstep_parser import OpenStepDecoder
+
+sys.stdout.reconfigure(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[2]
+IOS = ROOT / "frontend/ios"
+NATIVE = IOS / "App/App/Native"
+OWNED = ["BodyView.swift", "BodyAnalytics.swift", "BodyCalendarView.swift", "BodyEntrySheet.swift",
+         "BodyMuscleMap.swift", "BodyRecordsSection.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "WorkoutView.swift"]
+parser = tree_sitter.Parser(tree_sitter.Language(tree_sitter_swift.language()))
+files = [NATIVE / name for name in OWNED] + sorted((IOS / "Tests/BodyCoreTests").glob("*.swift")) + [IOS / "Package.swift"]
+errors = []
+for file in files:
+    data = file.read_bytes()
+    tree = parser.parse(data)
+    stack = [tree.root_node]
+    while stack:
+        node = stack.pop()
+        if node.type == "ERROR" or node.is_missing:
+            errors.append({"file": file.relative_to(ROOT).as_posix(), "line": node.start_point.row + 1,
+                           "type": node.type, "text": node.text.decode("utf8")[:160]})
+        stack.extend(node.children)
+
+project_file = IOS / "App/App.xcodeproj/project.pbxproj"
+project = OpenStepDecoder.ParseFromString(project_file.read_text("utf8"))
+objects = project["objects"]
+def phase_names(isa):
+    return [objects[objects[entry]["fileRef"]].get("path", objects[objects[entry]["fileRef"]].get("name"))
+            for phase in objects.values() if phase.get("isa") == isa for entry in phase["files"]]
+
+sources = phase_names("PBXSourcesBuildPhase")
+resources = phase_names("PBXResourcesBuildPhase")
+missing = [name for name in OWNED if name not in sources]
+all_missing = [path.name for path in NATIVE.glob("*.swift") if path.name not in sources]
+asset_root = IOS / "App/App/Assets.xcassets/BodyMap"
+geometry_source = (ROOT / "frontend/src/lib/body-paths.js").read_text("utf8").split("export default ", 1)[1].strip().rstrip(";")
+geometry = json.loads(geometry_source)["male"]
+muscles = re.search(r"static let muscleOrder = \[(.*?)\]", (NATIVE / "Catalogue.swift").read_text("utf8"), re.S)
+muscles = re.findall(r'"([^"]+)"', muscles.group(1))
+asset_errors = []
+asset_files = []
+for side in ["front", "back"]:
+    for name in ["silhouette"] + muscles:
+        asset = f"BodyMap-{side}-{name}"
+        folder = asset_root / f"{asset}.imageset"
+        svg_path, json_path = folder / f"{asset}.svg", folder / "Contents.json"
+        asset_files.extend([svg_path, json_path])
+        try:
+            svg = ET.parse(svg_path).getroot()
+            config = json.loads(json_path.read_text("utf8"))
+            actual = [node.attrib["d"] for node in svg]
+            source = geometry[side]
+            expected = source["p"].get(name, []) if name != "silhouette" else [d for key, values in source["p"].items() if key not in muscles for d in values]
+            if actual != expected or svg.attrib["viewBox"] != source["vb"]:
+                asset_errors.append(f"{asset}: geometry drift")
+            if config["properties"]["template-rendering-intent"] != "template" or not config["properties"]["preserves-vector-representation"]:
+                asset_errors.append(f"{asset}: not a native vector template")
+        except Exception as error:
+            asset_errors.append(f"{asset}: {error}")
+
+body = "\n".join((NATIVE / name).read_text("utf8") for name in OWNED if name.startswith("Body"))
+tests = (IOS / "Tests/BodyCoreTests/BodyAnalyticsTests.swift").read_text("utf8")
+checks = {
+    "swift_syntax_only": not errors,
+    "project_identifiers": all(len(key) == 24 for key in objects),
+    "body_sources_in_build": not missing,
+    "all_current_native_sources_in_build": not all_missing,
+    "body_attribution_bundled": "BodyMapNotices.txt" in resources,
+    "asset_catalog_bundled": "Assets.xcassets" in resources,
+    "vector_geometry_matches_existing_source": not asset_errors,
+    "native_controls_present": all(token in body for token in ["List {", "DisclosureGroup", "Picker(", "Chart(", "UICalendarView()", ".buttonStyle(.glass)", ".buttonStyle(.glassProminent)"]),
+    "no_simulated_glass_or_web_ui": all(token not in body for token in ["WKWebView", ".blur(", "UIVisualEffectView", "Canvas {", "DragGesture", "LinearGradient", "RadialGradient"]),
+    "native_calendar_not_custom_grid": "LazyVGrid" not in body and "UICalendarSelectionSingleDate" in body,
+    "no_screenshot_or_mockup_in_production": all(token not in body for token in ["IMG_130", "generated_images", "85.5", "25.6", "63.6"]),
+}
+report = {
+    "scope": "Windows static syntax, project and source/asset checks ONLY; NOT Swift typechecking, XCTest execution, Xcode build or iOS runtime",
+    "checks": checks, "swift_files_parsed": len(files), "syntax_errors": errors,
+    "missing_build_sources": missing, "other_missing_native_sources": all_missing,
+    "vector_template_assets_checked": len(asset_files) // 2, "asset_errors": asset_errors,
+    "swift_tests_defined_but_not_executed": len(re.findall(r"func test\w+\(", tests)),
+    "unverified": ["Swift typecheck and Swift XCTest", "Xcode build and asset catalog compilation", "iPhone/iPad runtime, native Liquid Glass and calendar layout", "VoiceOver, Dynamic Type and light/dark screenshots"],
+    "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files + asset_files + [project_file, NATIVE / "BodyMapNotices.txt"]}
+}
+output = ROOT / "docs/dev/body-page-static-checks-2026-10-23.json"
+output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf8")
+print(json.dumps({key: value for key, value in report.items() if key != "sha256"}, ensure_ascii=False, indent=2))
+sys.exit(0 if all(checks.values()) else 1)
