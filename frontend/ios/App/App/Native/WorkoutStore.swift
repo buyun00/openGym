@@ -43,6 +43,7 @@ extension GymStore {
             let sets = (0..<max(1, slot.setCount)).map { index in
                 var set = WorkoutLogic.seed(mode: mode, reps: slot.reps,
                                            previous: completed.isEmpty ? nil : completed[min(index, completed.count - 1)])
+                if completed.isEmpty, let weight = slot.weight { set.weight = weight }
                 if let minutes = slot.minutes { set.minutes = minutes }
                 if let speed = slot.speed { set.speed = speed }
                 if let incline = slot.incline { set.incline = incline }

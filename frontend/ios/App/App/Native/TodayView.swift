@@ -16,6 +16,11 @@ struct TodayView: View {
                 WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && !showWaterEntry && selectedSupplement == nil)
                 ScrollView {
                     VStack(spacing: 20) {
+                        NavigationLink { GymConnectionView() } label: {
+                            Label(store.cloud.status, systemImage: store.cloud.errorMessage == nil ? "icloud" : "icloud.slash")
+                                .font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                        }.buttonStyle(.plain)
                         workoutSummary
                         hydration
                         supplements

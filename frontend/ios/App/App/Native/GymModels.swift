@@ -16,6 +16,7 @@ struct RoutineExercise: Codable, Identifiable, Hashable {
     var incline: Double? = nil
     var seconds: Double? = nil
     var note: String? = nil
+    var weight: Double? = nil
 }
 
 struct Routine: Codable, Identifiable, Hashable {
@@ -92,8 +93,19 @@ struct BodyMeasurement: Codable, Identifiable, Hashable {
     var id: UUID
     var date: Date
     var centimeters: [String: Double]
+    var bodyFatPercent: Double? = nil
 
-    static let fields = ["胸围", "腰围", "臀围", "上臂围", "大腿围", "小腿围"]
+    static let fields = ["颈围", "肩围", "胸围", "腰围", "臀围", "腹围", "左上臂围", "右上臂围",
+                         "左前臂围", "右前臂围", "左腕围", "右腕围", "左大腿围", "右大腿围",
+                         "左小腿围", "右小腿围", "左踝围", "右踝围", "上臂围", "大腿围", "小腿围"]
+}
+
+struct GymEquipmentRecord: Codable, Identifiable {
+    var id: String
+    var name: String
+    var note: String
+    var location: String
+    var exerciseNames: [String]
 }
 
 struct DayPlan: Codable, Hashable {

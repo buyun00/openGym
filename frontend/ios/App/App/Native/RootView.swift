@@ -30,9 +30,11 @@ struct RootView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             store.wellness.activate()
+            await store.cloud.sync(store: store)
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(30)) } catch { return }
                 store.wellness.refreshTime()
+                await store.cloud.sync(store: store)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in

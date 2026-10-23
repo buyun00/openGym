@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class GymStore {
     let wellness = WellnessStore()
+    let cloud = GymCloudSync()
     var routines: [Routine] = []
     var week: [DayPlan] = (1...7).map { DayPlan(day: $0, routineIds: []) }
     var workouts: [WorkoutSession] = []
@@ -15,12 +16,14 @@ final class GymStore {
     var targetKg: Double?
     var restSeconds: Int = 90
     var ownedEquipment: [String] = []
+    var dayPlan: [String: [String]] = [:]
+    var gymEquipment: [GymEquipmentRecord] = []
     var tab: AppTab = .today
     var restEndsAt: Date?
     var workoutPreferences = WorkoutPreferences()
     private let workoutAlerts = WorkoutRestAlerts()
 
-    private struct Snapshot: Codable {
+    struct Snapshot: Codable {
         var routines: [Routine] = []
         var week: [DayPlan] = []
         var workouts: [WorkoutSession] = []
@@ -31,16 +34,23 @@ final class GymStore {
         var restSeconds: Int = 90
         var ownedEquipment: [String] = []
         var workoutPreferences: WorkoutPreferences?
+        var dayPlan: [String: [String]]?
+        var gymEquipment: [GymEquipmentRecord]?
     }
 
-    init() { load(); refreshWorkoutAlerts() }
+    init() { load(); cloud.restore(into: self); refreshWorkoutAlerts() }
 
     func refreshWorkoutAlerts() {
         workoutAlerts.update(end: restEndsAt, preferences: workoutPreferences) { [weak self] in self?.clearRest() }
     }
 
     var todayIndex: Int { Weekday.index(for: Date()) }
-    var todayRoutines: [Routine] { routines(on: todayIndex) }
+    var todayRoutines: [Routine] {
+        if let ids = dayPlan[WellnessDay.key(Date())] {
+            return ids.compactMap { key in routines.first { $0.id.uuidString == key } }
+        }
+        return routines(on: todayIndex)
+    }
     var didTrainToday: Bool { !finished(on: Date()).isEmpty }
 
     var todayTitle: String {
@@ -326,7 +336,9 @@ final class GymStore {
         let previous = bodyMeasurements
         let day = Calendar.current.startOfDay(for: date)
         if let index = bodyMeasurements.firstIndex(where: { Calendar.current.isDate($0.date, inSameDayAs: day) }) {
-            bodyMeasurements[index].centimeters = valid
+            // Keep imported custom measurements that the native editor does not expose.
+            bodyMeasurements[index].centimeters = bodyMeasurements[index].centimeters
+                .filter { !BodyMeasurement.fields.contains($0.key) }.merging(valid) { _, new in new }
         } else {
             bodyMeasurements.append(BodyMeasurement(id: UUID(), date: day, centimeters: valid))
         }
@@ -489,6 +501,10 @@ final class GymStore {
             normalizeWeek()
             return
         }
+        apply(snapshot: snapshot)
+    }
+
+    func apply(snapshot: Snapshot) {
         routines = snapshot.routines
         week = snapshot.week
         workouts = snapshot.workouts
@@ -500,13 +516,14 @@ final class GymStore {
         restEndsAt = active?.restEndsAt
         workoutPreferences = snapshot.workoutPreferences ?? WorkoutPreferences()
         ownedEquipment = snapshot.ownedEquipment
+        dayPlan = snapshot.dayPlan ?? [:]
+        gymEquipment = snapshot.gymEquipment ?? []
         normalizeWeek()
+        refreshWorkoutAlerts()
     }
 
-    @discardableResult
-    func save() -> Bool {
-        normalizeWeek()
-        let snapshot = Snapshot(
+    func snapshot() -> Snapshot {
+        Snapshot(
             routines: routines,
             week: week,
             workouts: workouts,
@@ -516,11 +533,24 @@ final class GymStore {
             targetKg: targetKg,
             restSeconds: restSeconds,
             ownedEquipment: ownedEquipment,
-            workoutPreferences: workoutPreferences
+            workoutPreferences: workoutPreferences,
+            dayPlan: dayPlan,
+            gymEquipment: gymEquipment
         )
+    }
+
+    @discardableResult
+    func save() -> Bool {
+        normalizeWeek()
+        let snapshot = snapshot()
         do {
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
+            if cloud.ownsCache {
+                try cloud.persistLocal(snapshot)
+                cloud.schedule(store: self)
+            } else {
+                let data = try JSONEncoder().encode(snapshot)
+                try data.write(to: fileURL, options: .atomic)
+            }
             saveError = nil
             return true
         } catch {

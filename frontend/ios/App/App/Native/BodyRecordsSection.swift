@@ -111,6 +111,10 @@ struct BodyRecordsSection: View {
                     ForEach(BodyMeasurement.fields, id: \.self) { field in
                         if let value = measurement.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
                     }
+                    ForEach(measurement.centimeters.keys.filter { !BodyMeasurement.fields.contains($0) }.sorted(), id: \.self) { field in
+                        if let value = measurement.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
+                    }
+                    if let fat = measurement.bodyFatPercent { LabeledContent("体脂率", value: "\(formatKg(fat))%") }
                     Button("编辑围度") { onEntry(.measurement(measurement)) }
                 } label: { Label("身体围度 · \(measurement.centimeters.count)项", systemImage: "ruler") }
                 .swipeActions { Button("删除", role: .destructive) { store.deleteMeasurement(measurement.id) } }

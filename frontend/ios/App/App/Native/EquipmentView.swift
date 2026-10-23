@@ -5,6 +5,18 @@ struct EquipmentView: View {
 
     var body: some View {
         List {
+            if !store.gymEquipment.isEmpty {
+                Section("网页器械库") {
+                    ForEach(store.gymEquipment) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(item.name).font(.headline)
+                            if !item.note.isEmpty { Text(item.note).font(.subheadline) }
+                            if !item.location.isEmpty { Text(item.location).font(.caption).foregroundStyle(.secondary) }
+                            if !item.exerciseNames.isEmpty { Text(item.exerciseNames.joined(separator: "、")).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+            }
             Section {
                 Text("勾上你有的器械。动作库里可以只显示这些。")
                     .font(.subheadline)
