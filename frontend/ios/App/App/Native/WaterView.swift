@@ -37,7 +37,7 @@ struct WaterView: View {
                         VStack(spacing: 20) {
                             progressHeader
                             Spacer(minLength: 24)
-                            if !scheduledDoses.isEmpty { supplementCard }
+                            if !scheduledDoses.isEmpty { supplementReminder }
                             Spacer(minLength: 16)
                             if dynamicTypeSize.isAccessibilitySize { quickRecorder }
                         }
@@ -107,7 +107,7 @@ struct WaterView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var supplementCard: some View {
+    private var supplementReminder: some View {
         let next = pendingDoses.first ?? scheduledDoses.first
         return Group {
             if let next {
@@ -126,7 +126,7 @@ struct WaterView: View {
                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                     }
                     .frame(minHeight: 44).padding(14)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain).foregroundStyle(.primary)
                 .accessibilityHint("打开服用计划，实际服用后再确认")

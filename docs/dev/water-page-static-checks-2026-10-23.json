@@ -21,19 +21,23 @@
   "syntax_errors": [],
   "missing_build_sources": [],
   "sha256": {
-    "frontend/ios/App/App/Native/WaterView.swift": "d042a44820055d8e918cf30e3b2a1eb60a3e6e11c1ad9e28f8dffad6e24d53a2",
-    "frontend/ios/App/App/Native/WellnessModels.swift": "f8d891d3dd2272b672314e18bd4da3fee3b41a65779cc443244144282a113b22",
-    "frontend/ios/App/App/Native/WellnessStore.swift": "cb9317893751545b2c24750db03aaa6892785d4875f1876db3b9d4353a241dc4",
-    "frontend/ios/App/App/Native/TodayView.swift": "2cd88235029b91f23e0850ce0b514b55728461ed30d4d63f88361e96b5f456fe",
-    "frontend/ios/App/App/Native/RootView.swift": "4fbe9c673ec297a7c5fd4430350e1be4caca87d0a6d92f0a8d8035ef13f7ced0",
-    "frontend/ios/App/App/Native/WaterBackground.swift": "998ce451bb6ea1e762fb64896f854d62c31bf1041c8896f04c692b20eaa7a862",
-    "frontend/ios/App/App/Native/WaterMotion.swift": "a95b4a442e6626289f681d7eef37ac48f4950ac49fbd5d905496e32d2b24265c",
-    "frontend/ios/App/App/Native/WellnessPersistence.swift": "9237f7f30d7756c8c7b5d007dbc7f3bf9f7427daba2b5820abc67edbcbc12b3c",
-    "frontend/ios/App/App/Native/WellnessNotifications.swift": "4470999e2b8bd93c97fb54aeb10511add6697d63fc22adff1ceaae5fe94db47e",
-    "frontend/ios/Tests/WellnessCoreTests/DrinkRecordTests.swift": "34c1e86093cf3395997da6a434435b423771c3fcb9862e6bccc67deb8e11c36e",
-    "frontend/ios/Tests/WellnessCoreTests/WaterMotionTests.swift": "bdb9ea16d1873c162bef8bc884e772a4428c4d3caebc19ae7ba00ba9859edc63",
-    "frontend/ios/Tests/WellnessCoreTests/WellnessCoreTests.swift": "d0eda6ebc28de669582d3bcb5bcea2e74b63e78de107978d874bf32462318c68",
-    "frontend/ios/App/App.xcodeproj/project.pbxproj": "3270150af605418135cbbd50f5e555d7d3d7c49489317ffe8f88de11e118910b",
+    "frontend/ios/App/App/Native/WaterView.swift": "3d530b69eaaa17d6097cda3bf817a413b217d89ac6061516079c63fcdbf94f58",
+    "frontend/ios/App/App/Native/WellnessModels.swift": "9242593f47f3dbc37ca978af9bec04e116e3f00ceb5dbb4ea2c2ee9ceeb636ed",
+    "frontend/ios/App/App/Native/WellnessStore.swift": "5f2587f15d5e1ff1f1c256c44e6beeff6d6a7818fa465c425b06e5f1ebc58db3",
+    "frontend/ios/App/App/Native/TodayView.swift": "4ae9eacb651d39d31809ac440cd5211b475f3cb6c0ef1ae4e61ce201269df930",
+    "frontend/ios/App/App/Native/RootView.swift": "254d5d020f11de3bac48153e7b30e142c72d037898ae8f038b7b64b620707a7e",
+    "frontend/ios/App/App/Native/WaterBackground.swift": "4a3f16566fcb7c753c9f1e657827c6abe60e5d026aceff45eae19b848ed0f378",
+    "frontend/ios/App/App/Native/WaterMotion.swift": "0b2aaae4e9c35b7938602262fad4010eaeb074f763620b61fc48e7569e80f183",
+    "frontend/ios/App/App/Native/WellnessPersistence.swift": "029e3ef4a8b78cdb39cf525e4f65dd083bbca0c46109dea3684bf6c9bcd9584e",
+    "frontend/ios/App/App/Native/WellnessNotifications.swift": "2771848706fcdcbc3e91a3fd9dd5b66e639d97eeec4203e35eb51bb3dc6d34ea",
+    "frontend/ios/Tests/WellnessCoreTests/DrinkRecordTests.swift": "0c3a36ec66e1749cebe56256302a17ca9b8520732acf2957d664aec6513fafe8",
+    "frontend/ios/Tests/WellnessCoreTests/WaterMotionTests.swift": "da8e6009da3ef321783deff015ce1fe7e459d8c8fae548d974b3d96cc5fee38b",
+    "frontend/ios/Tests/WellnessCoreTests/WellnessCoreTests.swift": "9dfcfc68f1754c21def555b6457b4685a19e4dda843c9b93cd50fde6f5071885",
+    "frontend/ios/App/App.xcodeproj/project.pbxproj": "7a0f8ae926a57c090e235f9aa81e124bcabbd9bc856a2a9703e9e64b026239dc",
     "frontend/ios/Package.swift": "69dbffe15a657962361f12fddb1eb9fb8398b82cc449856f275324a4d3a23fc1"
+  },
+  "validation_context": {
+    "base_revision": "a32e36fcfa92b96499873fcd36d09edbf27e12ab",
+    "snapshot": "Committed HEAD plus the water reminder appearance change; unrelated working-tree changes excluded."
   }
 }
