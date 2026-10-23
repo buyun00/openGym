@@ -6,7 +6,6 @@ struct WaterView: View {
     @State private var showAdd = false
     @State private var showSettings = false
     @State private var showHistory = false
-    @State private var editEntry: WaterEntry?
     @State private var selectedSupplement: Supplement?
     @State private var drink: DrinkKind = .water
     @State private var selectedAmount: Int?
@@ -26,7 +25,7 @@ struct WaterView: View {
     }
     private var pendingDoses: [DoseInstance] { scheduledDoses.filter { wellness.state.record(for: $0) == nil } }
     private var waterActive: Bool {
-        store.tab == .water && !showAdd && !showSettings && !showHistory && editEntry == nil && selectedSupplement == nil
+        store.tab == .water && !showAdd && !showSettings && !showHistory && selectedSupplement == nil
     }
 
     var body: some View {
@@ -38,7 +37,6 @@ struct WaterView: View {
                         VStack(spacing: 20) {
                             progressHeader
                             Spacer(minLength: 24)
-                            recentRecords
                             if !scheduledDoses.isEmpty { supplementCard }
                             Spacer(minLength: 16)
                             if dynamicTypeSize.isAccessibilitySize { quickRecorder }
@@ -73,7 +71,6 @@ struct WaterView: View {
                 }
             }
             .sheet(isPresented: $showAdd) { WaterEntrySheet(initialDrink: drink, initialAmount: amount) }
-            .sheet(item: $editEntry) { WaterEntrySheet(entry: $0) }
             .sheet(isPresented: $showSettings) { WellnessSettingsSheet() }
             .sheet(isPresented: $showHistory) { WaterHistorySheet() }
             .sheet(item: $selectedSupplement) { DoseSheet(supplement: $0) }
@@ -110,83 +107,6 @@ struct WaterView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var recentRecords: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    recentHeading
-                    Spacer(minLength: 8)
-                    historyButton
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    recentHeading
-                    historyButton
-                }
-            }
-            if entries.isEmpty {
-                Text("今天还没有记录").font(.headline)
-                Text("选一种饮品，记下今天的第一杯。")
-                    .font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 8)
-            } else {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 8) {
-                        ForEach(Array(entries.prefix(3))) { entry in
-                            Button { editEntry = entry } label: { WaterRecordRow(entry: entry) }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("修改这次记录的饮品、容量或时间")
-                        }
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        ForEach(Array(entries.prefix(3))) { entry in
-                            Button { editEntry = entry } label: {
-                                VStack(spacing: 6) {
-                                    Text(entry.date, style: .time).font(.caption).foregroundStyle(.secondary)
-                                    Text("\(entry.milliliters) mL")
-                                        .font(.subheadline.weight(.semibold)).monospacedDigit()
-                                    Label(entry.drink.name, systemImage: entry.drink.symbol)
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 76)
-                                .contentShape(.rect)
-                            }
-                            .buttonStyle(.plain).foregroundStyle(.primary)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityHint("修改这次记录的饮品、容量或时间")
-                        }
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
-    }
-
-    private var recentHeading: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("最近记录").font(.headline)
-            if let last = wellness.state.water.filter({ $0.date <= wellness.now }).max(by: { $0.date < $1.date }) {
-                Text(lastDrinkText(last.date)).font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var historyButton: some View {
-        Button { showHistory = true } label: {
-            Label("历史", systemImage: "chevron.right").labelStyle(.titleAndIcon)
-                .font(.subheadline).frame(minHeight: 44)
-        }
-        .accessibilityLabel("查看全部饮水历史")
-    }
-
-    private func lastDrinkText(_ date: Date) -> String {
-        let minutes = max(0, Int(wellness.now.timeIntervalSince(date) / 60))
-        if minutes < 1 { return "刚刚记录了一杯" }
-        if minutes < 60 { return "距上次喝水 \(minutes) 分钟" }
-        if minutes < 1440 { return "距上次喝水 \(minutes / 60) 小时 \(minutes % 60) 分钟" }
-        return "上次记录 \(date.formatted(date: .abbreviated, time: .shortened))"
-    }
-
     private var supplementCard: some View {
         let next = pendingDoses.first ?? scheduledDoses.first
         return Group {
@@ -215,12 +135,7 @@ struct WaterView: View {
     }
 
     private var quickRecorder: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Text("记一杯").font(.headline)
-                Spacer()
-                Text("选择饮品和容量").font(.caption).foregroundStyle(.secondary)
-            }
+        VStack(spacing: 18) {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(DrinkKind.allCases) { kind in
@@ -278,8 +193,6 @@ struct WaterView: View {
                 .accessibilityElement(children: .contain)
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
     }
 
     @ViewBuilder private var recordActions: some View {
