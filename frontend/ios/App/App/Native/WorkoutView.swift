@@ -3,24 +3,47 @@ import UIKit
 
 struct WorkoutView: View {
     @Environment(GymStore.self) private var store
-    @State private var presenting = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showingActive: Bool
+    var onClose: () -> Void
+
+    init(resuming: Bool, onClose: @escaping () -> Void) {
+        _showingActive = State(initialValue: resuming)
+        self.onClose = onClose
+    }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let session = store.active {
-                    List {
-                        Section {
-                            Button { presenting = true } label: { Label("继续：\(session.name)", systemImage: "play.fill") }
-                            Text("已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组").foregroundStyle(.secondary)
-                        }
-                    }
-                } else { chooserList }
+        Group {
+            if showingActive {
+                ActiveWorkoutView(onClose: onClose).transition(.opacity)
+            } else {
+                chooserNavigation.transition(.opacity)
             }
+        }
+        .tint(.green)
+        .onChange(of: store.active?.id, initial: true) { _, id in
+            guard id != nil else {
+                if showingActive { onClose() }
+                return
+            }
+            guard !showingActive else { return }
+            // The chooser and active session live inside one native modal.
+            // Keep active content mounted during dismissal; a finished session
+            // must not briefly reveal the chooser behind the closing animation.
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) { showingActive = true }
+        }
+        .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && !showingActive }, set: { if !$0 { store.saveError = nil } })) {
+            Button("好") { store.saveError = nil }
+        } message: { Text(store.saveError ?? "") }
+    }
+
+    private var chooserNavigation: some View {
+        NavigationStack {
+            chooserList
             .navigationTitle("开始锻炼")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if store.active == nil && !presenting {
+                if store.active == nil && !showingActive {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("返回首页", systemImage: "chevron.left", action: returnToToday)
                             .labelStyle(.titleAndIcon)
@@ -29,14 +52,6 @@ struct WorkoutView: View {
                 }
             }
         }
-        .tint(.green)
-        .onAppear { if store.tab == .workout && store.active != nil { presenting = true } }
-        .onChange(of: store.tab) { _, tab in if tab == .workout && store.active != nil { presenting = true } }
-        .onChange(of: store.active?.id) { _, id in presenting = id != nil }
-        .fullScreenCover(isPresented: $presenting) { ActiveWorkoutView().environment(store) }
-        .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && !presenting }, set: { if !$0 { store.saveError = nil } })) {
-            Button("好") { store.saveError = nil }
-        } message: { Text(store.saveError ?? "") }
     }
 
     private var chooserList: some View {
@@ -79,8 +94,8 @@ struct WorkoutView: View {
     }
 
     private func returnToToday() {
-        guard store.tab == .workout, store.active == nil, !presenting else { return }
-        store.tab = .today
+        guard store.tab == .workout, store.active == nil, !showingActive else { return }
+        onClose()
     }
 
     private func routineLabel(_ routine: Routine) -> some View {
@@ -98,7 +113,7 @@ enum WorkoutSheet: Identifiable, Equatable {
 
 struct ActiveWorkoutView: View {
     @Environment(GymStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    var onClose: () -> Void
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -181,7 +196,7 @@ struct ActiveWorkoutView: View {
         } message: { Text("本次训练的记录将被删除且不会保存。此前的训练历史不受影响。") }
         .onChange(of: store.active?.id) { _, id in
             if id != discardSessionId { discardSessionId = nil; confirmingDiscard = false }
-            if id == nil { dismiss() }
+            if id == nil { onClose() }
         }
         .onAppear { previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled; updateAwake() }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled ?? false }
@@ -203,7 +218,7 @@ struct ActiveWorkoutView: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button("收起训练", systemImage: "chevron.down") { store.tab = .today; dismiss() }.labelStyle(.iconOnly)
+            Button("收起训练", systemImage: "chevron.down", action: onClose).labelStyle(.iconOnly)
         }
         ToolbarItem(placement: .principal) {
             VStack(spacing: 2) {

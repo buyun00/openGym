@@ -4,26 +4,34 @@ import UIKit
 struct RootView: View {
     @State private var store = GymStore()
     @State private var navigationTab: AppTab = .today
-    @State private var visitedTabs: Set<AppTab> = [.today]
     @State private var keyboardVisible = false
+    @State private var workoutPresented = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NativeRootHost(selection: navigationTab, keyboardVisible: keyboardVisible,
+                       reduceMotion: reduceMotion, contentEnabled: store.tab != .workout && !workoutPresented,
                        select: { tab in
-                           visitedTabs.insert(tab)
                            navigationTab = tab
                            store.tab = tab
-                       }) {
-            pages.environment(store).environment(\.scenePhase, scenePhase)
+                       }) { tab in
+            page(tab).environment(store).environment(\.scenePhase, scenePhase)
         }
         .ignoresSafeArea(.container)
         .environment(store)
-        .onChange(of: store.tab) { _, value in
+        .onChange(of: store.tab, initial: true) { _, value in
             if value != .workout {
-                visitedTabs.insert(value)
                 navigationTab = value
             }
+            setWorkoutPresented(value == .workout)
+        }
+        .fullScreenCover(isPresented: Binding(get: { workoutPresented }, set: { presented in
+            setWorkoutPresented(presented)
+            if !presented && store.tab == .workout { store.tab = .today }
+        })) {
+            WorkoutView(resuming: store.active != nil, onClose: returnToToday)
+                .environment(store).environment(\.scenePhase, scenePhase)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
@@ -50,18 +58,18 @@ struct RootView: View {
         }
     }
 
-    private var pages: some View {
-        ZStack {
-            ForEach(NativeNavigationTabs.destinations, id: \.tab) { destination in
-                if visitedTabs.contains(destination.tab) {
-                    page(destination.tab)
-                        .opacity(store.tab == destination.tab ? 1 : 0)
-                        .allowsHitTesting(store.tab == destination.tab)
-                        .accessibilityHidden(store.tab != destination.tab)
-                }
-            }
-            if store.tab == .workout { WorkoutView() }
-        }
+    private func setWorkoutPresented(_ presented: Bool) {
+        guard workoutPresented != presented else { return }
+        // Only the modal binding gets this transaction. Existing page sheets
+        // and navigation pushes retain their own system transitions.
+        var transaction = Transaction()
+        transaction.disablesAnimations = reduceMotion
+        withTransaction(transaction) { workoutPresented = presented }
+    }
+
+    private func returnToToday() {
+        store.tab = .today
+        setWorkoutPresented(false)
     }
 
     @ViewBuilder private func page(_ tab: AppTab) -> some View {
@@ -75,32 +83,38 @@ struct RootView: View {
     }
 }
 
-// The system tab bar uses the full available width. The hosting controller
-// receives its measured occlusion as real safe-area insets for every page.
+// The system tab bar uses the full available width. The native page container
+// forwards its measured occlusion as real safe-area insets to every child.
 private struct NativeRootHost<Content: View>: UIViewControllerRepresentable {
     var selection: AppTab
     var keyboardVisible: Bool
+    var reduceMotion: Bool
+    var contentEnabled: Bool
     var select: (AppTab) -> Void
-    var content: Content
+    var content: (AppTab) -> Content
 
     init(selection: AppTab, keyboardVisible: Bool,
+         reduceMotion: Bool, contentEnabled: Bool,
          select: @escaping (AppTab) -> Void,
-         @ViewBuilder content: () -> Content) {
+         @ViewBuilder content: @escaping (AppTab) -> Content) {
         self.selection = selection
         self.keyboardVisible = keyboardVisible
+        self.reduceMotion = reduceMotion
+        self.contentEnabled = contentEnabled
         self.select = select
-        self.content = content()
+        self.content = content
     }
 
     func makeUIViewController(context: Context) -> RootNavigationController<Content> {
         let controller = RootNavigationController(content: content)
-        controller.update(selection: selection, keyboardVisible: keyboardVisible, select: select)
+        controller.update(selection: selection, keyboardVisible: keyboardVisible, reduceMotion: reduceMotion,
+                          contentEnabled: contentEnabled, select: select, content: content)
         return controller
     }
 
     func updateUIViewController(_ controller: RootNavigationController<Content>, context: Context) {
-        controller.hosting.rootView = content
-        controller.update(selection: selection, keyboardVisible: keyboardVisible, select: select)
+        controller.update(selection: selection, keyboardVisible: keyboardVisible, reduceMotion: reduceMotion,
+                          contentEnabled: contentEnabled, select: select, content: content)
     }
 }
 
@@ -120,14 +134,24 @@ private enum NativeNavigationTabs {
 }
 
 private final class RootNavigationController<Content: View>: UIViewController, UITabBarDelegate {
-    let hosting: UIHostingController<Content>
+    private let pager = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
+    private var hosts: [AppTab: UIHostingController<Content>] = [:]
+    private var content: (AppTab) -> Content
     private let tabBar = UITabBar(frame: .zero)
     private var select: (AppTab) -> Void = { _ in }
     private var keyboardVisible = false
+    private var reduceMotion = false
+    private var contentEnabled = true
+    private var requestedSelection: AppTab = .today
+    private var displayedSelection: AppTab?
+    private var transitionInFlight = false
+    private var needsNonanimatedRecovery = false
+    private var isVisible = false
+    private var isResizing = false
     private let contentClearance: CGFloat = 12
 
-    init(content: Content) {
-        hosting = UIHostingController(rootView: content)
+    init(content: @escaping (AppTab) -> Content) {
+        self.content = content
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -136,12 +160,14 @@ private final class RootNavigationController<Content: View>: UIViewController, U
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
-        addChild(hosting)
-        hosting.view.backgroundColor = .clear
-        hosting.safeAreaRegions = .all
-        view.addSubview(hosting.view)
-        hosting.didMove(toParent: self)
+        view.backgroundColor = .systemBackground
+        addChild(pager)
+        pager.view.backgroundColor = .systemBackground
+        // No data source: page content gestures remain with the page. Only
+        // the native tab bar requests these horizontal navigation transitions.
+        pager.dataSource = nil
+        view.addSubview(pager.view)
+        pager.didMove(toParent: self)
 
         tabBar.delegate = self
         tabBar.itemPositioning = .fill
@@ -154,15 +180,97 @@ private final class RootNavigationController<Content: View>: UIViewController, U
         view.addSubview(tabBar)
     }
 
-    func update(selection: AppTab, keyboardVisible: Bool, select: @escaping (AppTab) -> Void) {
+    func update(selection: AppTab, keyboardVisible: Bool, reduceMotion: Bool, contentEnabled: Bool,
+                select: @escaping (AppTab) -> Void, content: @escaping (AppTab) -> Content) {
         self.select = select
+        self.content = content
         self.keyboardVisible = keyboardVisible
+        self.reduceMotion = reduceMotion
+        self.contentEnabled = contentEnabled
+        requestedSelection = selection
+        // Reuse each hosting controller/SwiftUI identity rather than destroying
+        // navigation stacks, form state and scroll views at every tab change.
+        for (tab, hosting) in hosts { hosting.rootView = content(tab) }
         loadViewIfNeeded()
         if let index = NativeNavigationTabs.destinations.firstIndex(where: { $0.tab == selection }),
            let items = tabBar.items, items.indices.contains(index), tabBar.selectedItem !== items[index] {
             tabBar.selectedItem = items[index]
         }
+        synchronizeInteraction()
+        showRequestedTabIfPossible()
         view.setNeedsLayout()
+    }
+
+    private func host(for tab: AppTab) -> UIHostingController<Content> {
+        if let hosting = hosts[tab] { return hosting }
+        let hosting = UIHostingController(rootView: content(tab))
+        hosting.safeAreaRegions = .all
+        hosting.view.backgroundColor = .systemBackground
+        hosts[tab] = hosting
+        return hosting
+    }
+
+    private func showRequestedTabIfPossible() {
+        guard !transitionInFlight, !isResizing else { return }
+        let target = requestedSelection
+        guard displayedSelection != target,
+              let targetIndex = NativeNavigationTabs.destinations.firstIndex(where: { $0.tab == target }) else {
+            synchronizeInteraction()
+            return
+        }
+        let sourceIndex = displayedSelection.flatMap { current in
+            NativeNavigationTabs.destinations.firstIndex { $0.tab == current }
+        } ?? targetIndex
+        let direction: UIPageViewController.NavigationDirection = targetIndex >= sourceIndex ? .forward : .reverse
+        let animated = displayedSelection != nil && isVisible && view.window != nil
+            && contentEnabled && !reduceMotion && !needsNonanimatedRecovery
+        needsNonanimatedRecovery = false
+        transitionInFlight = true
+        synchronizeInteraction()
+        let destination = host(for: target)
+        pager.setViewControllers([destination], direction: direction, animated: animated) { [weak self] _ in
+            guard let self else { return }
+            // UIKit is authoritative if a transition was interrupted by a
+            // size/lifecycle change. Never infer that the requested page won.
+            let actual = self.pager.viewControllers?.first
+            self.displayedSelection = self.hosts.first(where: { $0.value === actual })?.key
+            self.needsNonanimatedRecovery = self.displayedSelection != target
+            // One latest request, not a queue of intermediate taps. Defer the
+            // unlock too: a SwiftUI update can arrive during this completion.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.transitionInFlight = false
+                self.synchronizeInteraction()
+                self.showRequestedTabIfPossible()
+            }
+        }
+    }
+
+    private func synchronizeInteraction() {
+        tabBar.isUserInteractionEnabled = contentEnabled
+        let settled = !transitionInFlight && displayedSelection == requestedSelection && contentEnabled
+        pager.view.isUserInteractionEnabled = settled
+        pager.view.accessibilityElementsHidden = !settled
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        isVisible = true
+        showRequestedTabIfPossible()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        isVisible = false
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        isResizing = true
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.isResizing = false
+            DispatchQueue.main.async { [weak self] in self?.showRequestedTabIfPossible() }
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -173,7 +281,7 @@ private final class RootNavigationController<Content: View>: UIViewController, U
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         guard view.bounds.width > 0, view.bounds.height > 0 else { return }
-        hosting.view.frame = view.bounds
+        pager.view.frame = view.bounds
         let system = windowSafeInsets()
         tabBar.isHidden = keyboardVisible
         if keyboardVisible {
@@ -222,8 +330,9 @@ private final class RootNavigationController<Content: View>: UIViewController, U
     }
 
     private func reserveContent(system: UIEdgeInsets, bottom: CGFloat) {
-        let old = hosting.additionalSafeAreaInsets
-        let actual = hosting.view.safeAreaInsets
+        // The native page container forwards this same viewport to each child.
+        let old = pager.additionalSafeAreaInsets
+        let actual = pager.view.safeAreaInsets
         // Subtract the previous addition to avoid counting the home indicator
         // or our own reservation twice when UIKit lays out again.
         let inherited = UIEdgeInsets(top: max(0, actual.top - old.top), left: max(0, actual.left - old.left),
@@ -232,7 +341,7 @@ private final class RootNavigationController<Content: View>: UIViewController, U
                                bottom: max(0, bottom - inherited.bottom), right: max(0, system.right - inherited.right))
         if abs(next.top - old.top) > 0.5 || abs(next.left - old.left) > 0.5
             || abs(next.bottom - old.bottom) > 0.5 || abs(next.right - old.right) > 0.5 {
-            hosting.additionalSafeAreaInsets = next
+            pager.additionalSafeAreaInsets = next
         }
     }
 
