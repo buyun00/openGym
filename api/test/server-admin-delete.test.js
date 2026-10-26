@@ -36,6 +36,7 @@ async function startServer(t, { twoAdmins = false } = {}) {
     invites: [{ code: 'CODE1', usedBy: VICTIM, usedAt: new Date().toISOString() }],
   }));
   fs.writeFileSync(path.join(dataDir, `state-${VICTIM}.json`), JSON.stringify({ unit: 'kg', workouts: [], _rev: 3 }));
+  fs.writeFileSync(path.join(dataDir, `workout-events-${VICTIM}.json`), JSON.stringify({ keys: { 'workout.completed:w': 1 } }));
   const child = spawn(process.execPath, ['server.js'], {
     cwd: API, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, PORT: '0', DATA_DIR: dataDir, ORIGIN: 'http://localhost:8080', RP_ID: 'localhost' },
@@ -68,6 +69,7 @@ test('removes the account and everything attached to it', async t => {
   assert.deepEqual(db.creds.map(c => c.userId), [ADMIN], 'their passkeys are gone');
   assert.deepEqual(db.subs.map(s => s.userId), [ADMIN], 'their push subscriptions are gone');
   assert.equal(fs.existsSync(path.join(h.dataDir, `state-${VICTIM}.json`)), false, 'their history is gone');
+  assert.equal(fs.existsSync(path.join(h.dataDir, `workout-events-${VICTIM}.json`)), false, 'their workout mail record is gone');
   // The code they joined with stays burned: it was used, and freeing it would quietly widen
   // an invite-only instance.
   assert.equal(db.invites[0].usedBy, VICTIM);
