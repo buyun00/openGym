@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodayView: View {
     @Environment(GymStore.self) private var store
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var showSettings = false
     @State private var selectedSupplement: Supplement?
     @State private var pendingWaterML = 250
@@ -100,24 +101,47 @@ struct TodayView: View {
     }
 
     private func workoutSummary(compact: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "dumbbell.fill")
-                .font(compact ? .title3 : .title2).foregroundStyle(.secondary).padding(compact ? 10 : 12)
-                .background(.quaternary, in: .circle).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("今日训练").font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
-                Text(store.todayTitle).font(compact ? .headline : .title3.bold())
-                    .fixedSize(horizontal: false, vertical: true)
-                if let detail = trainingDetail {
-                    Text(detail).font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
+        let highlighted = !store.didTrainToday
+        return Button {
+            // Open the existing chooser/resume flow. Merely entering the card
+            // must never create a session or replace an unfinished one.
+            store.tab = .workout
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: store.active == nil ? "dumbbell.fill" : "play.fill")
+                    .font(compact ? .title3 : .title2).padding(compact ? 10 : 12)
+                    .background(.quaternary, in: .circle).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("今日训练").font(compact ? .caption : .subheadline)
+                        Spacer(minLength: 0)
+                        Text(trainingActionTitle).font(compact ? .caption.bold() : .subheadline.bold())
+                    }
+                    Text(store.todayTitle).font(compact ? .headline : .title3.bold())
                         .fixedSize(horizontal: false, vertical: true)
+                    if let detail = trainingDetail {
+                        Text(detail).font(compact ? .caption : .subheadline)
+                            .foregroundStyle(highlighted ? Color.white : Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).accessibilityHidden(true)
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(compact ? 12 : 16)
+            .contentShape(RoundedRectangle(cornerRadius: 24))
         }
-        .padding(compact ? 12 : 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .accessibilityElement(children: .combine)
+        .buttonStyle(HomeTrainingCardStyle(highlighted: highlighted))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(trainingActionTitle)，\(store.todayTitle)")
+        .accessibilityValue(trainingDetail ?? "")
+        .accessibilityHint(store.active != nil ? "继续未完成的训练" : "打开训练选择，可选择计划或自由训练")
+        .accessibilityIdentifier("home-training-card")
+    }
+
+    private var trainingActionTitle: String {
+        if store.active != nil { return "继续训练" }
+        return store.didTrainToday ? "再次训练" : "开始训练"
     }
 
     private var trainingDetail: String? {
@@ -181,13 +205,12 @@ struct TodayView: View {
 
     private func supplements(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 8 : 12) {
-            Text("今日服用").font(.headline).foregroundStyle(.secondary)
+            Text("今日服用").font(.headline).modifier(WaterForegroundText())
             supplementRow(.b, compact: compact)
             Divider()
             supplementRow(.d, compact: compact)
         }
         .padding(compact ? 12 : 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func supplementRow(_ supplement: Supplement, compact: Bool) -> some View {
@@ -203,18 +226,18 @@ struct TodayView: View {
     private func supplementLabel(_ supplement: Supplement, instances: [DoseInstance], done: Int, compact: Bool) -> some View {
         HStack(spacing: compact ? 8 : 12) {
             Image(systemName: "pills.fill").font(compact ? .title3 : .title2)
-                .foregroundStyle(supplement == .b ? Color.orange : Color.mint)
+                .foregroundStyle(contrast == .increased ? Color.primary : supplement == .b ? Color.orange : Color.mint)
                 .frame(width: compact ? 28 : 36).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(supplement.name).font(.headline)
+                Text(supplement.name).font(.headline).modifier(WaterForegroundText())
                 Text(supplementCaption(supplement, instances: instances, done: done))
-                    .font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
+                    .font(compact ? .caption : .subheadline).modifier(WaterForegroundText())
                     .fixedSize(horizontal: false, vertical: true)
                 if supplement == .b {
                     HStack(spacing: 6) {
                         ForEach(instances) { instance in
                             Image(systemName: wellness.state.record(for: instance) == nil ? "circle" : "checkmark.circle.fill")
-                                .foregroundStyle(wellness.state.record(for: instance) == nil ? Color.secondary : Color.accentColor)
+                                .foregroundStyle(contrast == .increased || wellness.state.record(for: instance) == nil ? Color.primary : Color.accentColor)
                         }
                     }.font(.caption).accessibilityHidden(true)
                 }
@@ -248,18 +271,52 @@ struct TodayView: View {
     }
 }
 
+private struct HomeTrainingCardStyle: ButtonStyle {
+    var highlighted: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(highlighted ? Color.white : Color.primary)
+            .background {
+                if highlighted {
+                    RoundedRectangle(cornerRadius: 24).fill(Color(uiColor: .systemIndigo))
+                } else {
+                    // Keep the existing neutral training card after completion.
+                    RoundedRectangle(cornerRadius: 24).fill(.regularMaterial)
+                }
+            }
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+// A small halo around glyphs preserves the visible water behind the section.
+// Primary text adapts to appearance; increased contrast strengthens the halo.
+private struct WaterForegroundText: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(.primary)
+            .shadow(color: (colorScheme == .dark ? Color.black : Color.white)
+                .opacity(contrast == .increased ? 0.95 : 0.8),
+                    radius: contrast == .increased ? 2 : 1, x: 0, y: 0)
+    }
+}
+
 // Content actions use solid color/fill, with one prominent confirmation action.
 // The navigation bar and tab bar keep their system-provided materials.
 private struct HomeFunctionButtonStyle: ButtonStyle {
     var prominent = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.colorSchemeContrast) private var contrast
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
             .padding(.horizontal, 14)
             .frame(minHeight: 44)
-            .foregroundStyle(prominent ? Color.white : Color.accentColor)
+            .foregroundStyle(prominent ? Color.white : contrast == .increased ? Color.primary : Color.accentColor)
             .background(prominent ? Color.accentColor : Color(uiColor: .tertiarySystemFill),
                         in: RoundedRectangle(cornerRadius: 14))
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)

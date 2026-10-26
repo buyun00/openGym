@@ -51,6 +51,10 @@ root = (NATIVE / "RootView.swift").read_text("utf8")
 scene = (IOS / "App/App/SceneDelegate.swift").read_text("utf8")
 motion = (NATIVE / "WaterMotion.swift").read_text("utf8")
 background = (NATIVE / "WaterBackground.swift").read_text("utf8")
+workout = (NATIVE / "WorkoutView.swift").read_text("utf8").split("enum WorkoutSheet")[0]
+training_card = today.split("private func workoutSummary", 1)[1].split("private var trainingActionTitle", 1)[0]
+training_style = today.split("private struct HomeTrainingCardStyle", 1)[1].split("private struct WaterForegroundText", 1)[0]
+supplements = today.split("private func supplements", 1)[1].split("private func supplementRow", 1)[0]
 tab_order = re.findall(r'\.init\(tab: \.(\w+), title:', root)
 checks = {
     "swift_syntax": not errors,
@@ -60,15 +64,18 @@ checks = {
     "license_in_resources": "WaterThirdPartyNotices.txt" in resources,
     "motion_usage_description": bool(plist.get("NSMotionUsageDescription")),
     "four_navigation_tabs": tab_order == ["today", "plan", "body", "water"],
-    "native_tab_control": all(token in root for token in ["UIViewControllerRepresentable", "LayoutReportingTabBar: UITabBar", "LayoutReportingTabBar(frame:", "UITabBarItem(", "UITabBarDelegate", "didSelect item:", "tabBar.selectedItem"]),
+    "native_tab_control": all(token in root for token in ["UIViewControllerRepresentable", "UITabBar(frame:", "UITabBarItem(", "UITabBarDelegate", "didSelect item:", "tabBar.selectedItem"]),
     "native_tab_interaction_unmodified": all(token not in root for token in ["HomeDock", "selectionIndicatorImage", "UITapGestureRecognizer", "UIPanGestureRecognizer", "DragGesture", ".toolbar(.hidden, for: .tabBar)", "Capsule().fill", "bar.standardAppearance", "bar.backgroundImage", "tabBar.standardAppearance", "tabBar.backgroundImage"]),
-    "independent_start_button": 'workoutRequest += 1' in root and 'store.tab = .workout' in root and 'WorkoutView().id(workoutRequest)' in root and 'accessibilityIdentifier = "start-workout-action"' in root and "workout" not in tab_order,
-    "solid_training_action": 'UIButton.Configuration.filled()' in root and 'configuration.baseBackgroundColor = .systemIndigo' in root and 'hasWorkout ? "play.fill" : "figure.strengthtraining.traditional"' in root,
-    "home_safe_area_reservation": all(token in root for token in ['hosting.additionalSafeAreaInsets = next', 'actual.bottom - old.bottom', 'window.safeAreaLayoutGuide.layoutFrame', 'occupiedTop', 'hosting.safeAreaRegions = .all']),
-    "native_dock_bottom_and_surface_alignment": all(token in root for token in ['y: view.bounds.maxY - nativeHeight', 'tabBar.layoutIfNeeded()', 'candidate.convert(candidate.bounds, to: view)', 'surfaceRect.midY - actionDiameter / 2', 'effectView.effect is UIGlassEffect', 'effectView.effect is UIBlurEffect', 'frame.width >= tabBar.bounds.width * 0.7']) and all(token not in root for token in ['itemRegion.midY', 'tabItemRegion()', 'max(60, fitted.height)', '.safeAreaInset(edge: .bottom']),
-    "native_dock_layout_completion_refresh": all(token in root for token in ['override func layoutSubviews()', 'super.layoutSubviews()', 'didLayout?()', 'tabBar.didLayout =', 'guard !alignmentScheduled', 'DispatchQueue.main.async', 'alignStartToVisibleSurface(pass: "native-layout-completed")', 'override func viewDidAppear', 'override func viewWillTransition']),
-    "native_dock_no_private_geometry": all(token not in root for token in ['NSClassFromString', 'value(forKey:', 'setValue(', 'String(describing: type(of:', 'perform(NSSelectorFromString']) and '#if DEBUG\n    // Preserve R2' in root,
-    "native_dock_device_diagnostics": all(token in root for token in ['[RootDockLayout]', 'unresolved-bootstrap-not-validated', 'visualCenterError=', 'hitRegion=', 'source=']),
+    "independent_start_and_alignment_removed": all(token not in root for token in ['startButton', 'start-workout-action', 'workoutRequest', 'actionDiameter', 'LayoutReportingTabBar', 'visibleTabSurface', 'visibleFrame(of', 'scheduleVisualAlignment', 'tabItemDiagnosticRegion', 'RootDockLayout', 'UIVisualEffectView', 'subviews', 'DispatchQueue.main.async']),
+    "native_tabs_full_safe_width": all(token in root for token in ['let tabX = system.left', 'view.bounds.width - system.left - system.right', 'tabBar.itemPositioning = .fill', 'y: view.bounds.maxY - nativeHeight']) and all(token not in root for token in ['min(600', 'rowX', 'rowWidth', 'surfaceRect']),
+    "home_safe_area_reservation": all(token in root for token in ['hosting.additionalSafeAreaInsets = next', 'actual.bottom - old.bottom', 'window.safeAreaLayoutGuide.layoutFrame', 'view.bounds.maxY - tabBar.frame.minY + contentClearance', 'hosting.safeAreaRegions = .all']),
+    "home_training_card_enters_existing_flow": 'return Button {' in training_card and 'store.tab = .workout' in training_card and 'if store.tab == .workout { WorkoutView() }' in root and all(token not in training_card for token in ['store.start(', 'store.startToday(', 'store.startFreestyle(', 'store.openToday(']) and not re.search(r'store\.active\s*=(?!=)', training_card),
+    "existing_training_chooser_and_resume": all(token in workout for token in ['if let session = store.active', '.onAppear { if store.tab == .workout && store.active != nil { presenting = true } }', 'store.start([routine])', 'store.startFreestyle()', '.fullScreenCover(isPresented: $presenting)']),
+    "home_training_state_style": 'let highlighted = !store.didTrainToday' in training_card and 'Color(uiColor: .systemIndigo)' in training_style and 'fill(.regularMaterial)' in training_style and all(token in today for token in ['return "继续训练"', 'store.didTrainToday ? "再次训练" : "开始训练"']),
+    "home_training_card_accessibility": all(token in training_card for token in ['minHeight: 44', '.contentShape(', '.accessibilityLabel(', '.accessibilityValue(', '.accessibilityHint(', 'home-training-card']),
+    "supplements_reveal_water": '.background' not in supplements and 'supplementRow(.b' in supplements and 'supplementRow(.d' in supplements and today.count('.modifier(WaterForegroundText())') == 3,
+    "supplement_text_appearance_and_contrast": all(token in today for token in ['private struct WaterForegroundText: ViewModifier', r'@Environment(\.colorScheme)', r'@Environment(\.colorSchemeContrast)', 'colorScheme == .dark ? Color.black : Color.white', 'radius: contrast == .increased ? 2 : 1', '.foregroundStyle(.primary)']),
+    "supplement_actions_preserved": all(token in today for token in ['Button(complete ? "已服用" : "记录") { selectedSupplement = supplement }', 'Button("设置") { showSettings = true }', '.frame(minHeight: 44)', '.sheet(item: $selectedSupplement)']),
     "no_explicit_function_glass": all(token not in root + today for token in ['.buttonStyle(.glass', '.glassEffect(', '.glassProminent']),
     "solid_home_actions_and_plain_toolbar": 'HomeFunctionButtonStyle(prominent: true)' in today and 'HomeFunctionButtonStyle()' in today and '.sharedBackgroundVisibility(.hidden)' in today,
     "home_single_screen_source": 'ScrollView' not in today and 'ViewThatFits(in: .vertical)' in today and '.navigationBarTitleDisplayMode(.inline)' in today,
@@ -85,7 +92,7 @@ checks = {
     "no_webview_home": all(token not in today for token in ["WKWebView", "UIViewRepresentable", "HTML"]),
     "separate_persistence": 'wellness-state.json' in (NATIVE / 'WellnessStore.swift').read_text('utf8')
 }
-evidence_files = list(dict.fromkeys(files + [NATIVE / "RootView.swift", NATIVE / "TodayView.swift", NATIVE / "WellnessStore.swift", IOS / "App/App/SceneDelegate.swift", NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]))
+evidence_files = list(dict.fromkeys(files + [NATIVE / "RootView.swift", NATIVE / "TodayView.swift", NATIVE / "WorkoutView.swift", NATIVE / "GymStore.swift", NATIVE / "WellnessStore.swift", IOS / "App/App/SceneDelegate.swift", NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]))
 report = {
     "scope": "Windows static syntax and project/source wiring only; NOT Swift typecheck, Metal compilation, Swift tests, iOS layout, native gestures or device runtime",
     "swift_files_parsed": len(files), "checks": checks, "syntax_errors": errors, "missing_build_sources": missing,
