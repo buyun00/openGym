@@ -182,7 +182,7 @@ struct ActiveWorkoutView: View {
             Button("训练菜单", systemImage: "ellipsis") { sheet = .menu }.labelStyle(.iconOnly)
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("结束") { sheet = .finish }.buttonStyle(.glassProminent).fixedSize()
+            Button("结束") { sheet = .finish }.fixedSize()
         }
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
@@ -223,7 +223,7 @@ struct ActiveWorkoutView: View {
             Spacer()
             Button { select(index + 1, session) } label: { HStack { Text("下一个"); Image(systemName: "chevron.right") } }
                 .disabled(index + 1 >= session.exercises.count)
-        }.buttonStyle(.glass).controlSize(.large)
+        }.buttonStyle(.bordered).controlSize(.large)
     }
 
     private func select(_ index: Int, _ session: WorkoutSession) {
@@ -233,12 +233,12 @@ struct ActiveWorkoutView: View {
 
     private func footer(_ session: WorkoutSession) -> some View {
         VStack(spacing: 20) {
-            Button("添加动作", systemImage: "plus") { sheet = .addExercise }.buttonStyle(.glass)
-            Button(session.note?.isEmpty == false ? "编辑训练备注" : "添加训练备注", systemImage: "note.text") { sheet = .note }.buttonStyle(.glass)
+            Button("添加动作", systemImage: "plus") { sheet = .addExercise }.buttonStyle(.borderedProminent)
+            Button(session.note?.isEmpty == false ? "编辑训练备注" : "添加训练备注", systemImage: "note.text") { sheet = .note }.buttonStyle(.bordered)
             if let note = session.note, !note.isEmpty { Text(note).font(.subheadline).foregroundStyle(.secondary) }
             let completed = session.exercises.filter { !$0.sets.isEmpty && $0.sets.allSatisfy(\.done) }.count
             Button("\(store.activeDoneCount < store.activeSetCount ? "提前结束" : "结束训练") · \(completed)/\(session.exercises.count) 个动作") { sheet = .finish }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
         }.frame(maxWidth: .infinity).padding(.vertical, 12)
     }
 
@@ -306,7 +306,7 @@ struct WorkoutRestBar: View {
                 Button("减 15 秒", systemImage: "minus") { store.adjustRest(by: -15) }.labelStyle(.iconOnly)
                 Button("加 15 秒", systemImage: "plus") { store.adjustRest(by: 15) }.labelStyle(.iconOnly)
                 Button("跳过") { store.clearRest() }
-            }.buttonStyle(.glass).padding(12)
+            }.buttonStyle(.bordered).padding(12)
         }
     }
 }

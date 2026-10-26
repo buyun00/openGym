@@ -85,7 +85,8 @@ checks = {
     "body_attribution_bundled": "BodyMapNotices.txt" in resources,
     "asset_catalog_bundled": "Assets.xcassets" in resources,
     "vector_geometry_matches_existing_source": not asset_errors,
-    "native_controls_present": all(token in body for token in ["List {", "DisclosureGroup", "Picker(", "Chart(", "UICalendarView()", ".buttonStyle(.glass)", ".buttonStyle(.glassProminent)"]),
+    "native_controls_present": all(token in body for token in ["List {", "DisclosureGroup", "Picker(", "Chart(", "UICalendarView()", ".buttonStyle(.bordered)", ".buttonStyle(.borderedProminent)"]),
+    "body_content_has_no_explicit_glass": all(token not in body for token in [".buttonStyle(.glass)", ".buttonStyle(.glassProminent)", ".glassEffect(", "GlassEffectContainer"]),
     "no_simulated_glass_or_web_ui": all(token not in body for token in ["WKWebView", ".blur(", "UIVisualEffectView", "Canvas {", "DragGesture", "LinearGradient", "RadialGradient"]),
     "native_calendar_not_custom_grid": "LazyVGrid" not in body and "UICalendarSelectionSingleDate" in body,
     "no_screenshot_or_mockup_in_production": all(token not in body for token in ["IMG_130", "generated_images", "85.5", "25.6", "63.6"]),
@@ -93,20 +94,29 @@ checks = {
 if options.paging:
     view = (NATIVE / "BodyView.swift").read_text("utf8")
     main = view.split("struct BodyView: View {", 1)[1].split("private struct BodyDetailSheet: View {", 1)[0]
+    navigation = main.split("private var pageNavigation: some View {", 1)[1].split("@ViewBuilder private func pageContent", 1)[0]
     detail = view.split("private struct BodyDetailSheet: View {", 1)[1]
     records = (NATIVE / "BodyRecordsSection.swift").read_text("utf8")
     checks.update({
         "exactly_four_page_cases": 'case weight = "体重", muscle = "肌肉", intensity = "强度", records = "记录"' in view,
         "native_viewport_paging": all(token in main for token in ["LazyVStack(spacing: 0)", r"ForEach(BodySection.allCases, id: \.self)",
-            ".containerRelativeFrame(.vertical)", ".scrollTargetLayout()", ".scrollTargetBehavior(.paging)"]),
+            ".scrollTargetLayout()", ".scrollTargetBehavior(.paging)"]),
+        "one_safe_viewport_sizes_scroll_and_pages": main.count("GeometryReader { viewport in") == 1
+            and main.index("GeometryReader { viewport in") < main.index("ScrollView(.vertical)")
+            and main.count(".frame(width: viewport.size.width, height: viewport.size.height)") == 2
+            and "containerRelativeFrame" not in main,
         "bidirectional_page_navigation": '.scrollPosition(id: $visibleSection, anchor: .top)' in main
             and 'get: { visibleSection ?? .weight }' in main and 'visibleSection = section' in main
-            and 'selection: pageSelection' in main,
+            and 'selection: pageSelection' in main and 'pageSelection.wrappedValue = section' in navigation,
         "inline_toolbar_navigation": '.navigationBarTitleDisplayMode(.inline)' in main
             and 'ToolbarItem(placement: .principal) { pageNavigation }' in main
             and all(token not in main for token in ["safeAreaBar", "ScrollViewReader"]),
+        "prominent_title_and_plain_text_navigation": 'Text("身体").font(.title2.bold())' in main
+            and main.count(".sharedBackgroundVisibility(.hidden)") == 2
+            and all(token in navigation for token in [".buttonStyle(.plain)", ".underline(selected)", ".accessibilityAddTraits(selected ? .isSelected : [])"])
+            and ".pickerStyle(.segmented)" not in navigation,
         "main_pages_do_not_expand_or_ignore_safe_area": all(token not in main for token in
-            ["List {", "DisclosureGroup", "BodyCalendarView(", ".ignoresSafeArea", "UIScreen", ".clipped()", ".minimumScaleFactor", ".lineLimit("]),
+            ["List {", "DisclosureGroup", "BodyCalendarView(", ".ignoresSafeArea", "UIScreen", ".clipped()", ".clipShape(", ".mask(", ".scrollClipDisabled(", ".minimumScaleFactor", ".lineLimit("]),
         "compact_and_accessibility_detail_fallback": all(token in main for token in
             ["ViewThatFits(in: .vertical)", "typeSize.isAccessibilitySize", "minimalContent(section)", ".sheet(item: $detail)"]),
         "record_date_handoff": "recordDate: selectedRecordDate, recordMonth: visibleMonth" in main

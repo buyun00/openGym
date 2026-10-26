@@ -53,6 +53,12 @@ for key, record in metadata.items():
             media_errors.append(f"{key}: {field} {filename}")
 
 view_source = "\n".join(file.read_text("utf8") for file in sources if file.name not in ["GymModels.swift", "GymStore.swift", "Catalogue.swift", "WorkoutLogic.swift", "WorkoutStore.swift"])
+explicit_glass = [
+    {"file": file.relative_to(ROOT).as_posix(), "line": line_number}
+    for file in sources if file.name.startswith("Workout")
+    for line_number, line in enumerate(file.read_text("utf8").splitlines(), 1)
+    if re.search(r"\.\s*(?:glass(?:Prominent)?\b|glassEffect\b)|\bGlassEffectContainer\b", line)
+]
 native_missing = [p.name for p in NATIVE.glob("*.swift") if p.name not in build_sources]
 stale_sources = [name for name in build_sources if name.endswith(".swift") and not (NATIVE / name).is_file() and not (IOS / "App/App" / name).is_file()]
 media_reference = [obj for obj in objects.values() if obj.get("isa") == "PBXFileReference" and obj.get("path") == "../../../catalogue/media"]
@@ -68,8 +74,9 @@ checks = {
     "metadata_covers_existing_native_ids": not missing_ids,
     "all_declared_media_files_exist": not media_errors,
     "reference_treadmill_is_cardio_with_incline": metadata["2259"]["mode"] == "cardio" and metadata["2259"]["incline"] is True,
-    "native_glass_and_system_presentations": all(token in view_source for token in [".glassEffect(", ".buttonStyle(.glass)", ".buttonStyle(.glassProminent)", "NavigationStack", ".sheet(", "TextField(", "Picker(", "Toggle("]),
-    "actual_native_video_playback": "AVPlayerLooper" in view_source and "AVPlayerLayer" in view_source,
+    "native_controls_and_system_presentations": all(token in view_source for token in [".buttonStyle(.bordered)", ".buttonStyle(.borderedProminent)", "NavigationStack", ".sheet(", "TextField(", "Picker(", "Toggle("]),
+    "no_explicit_glass_in_workout_sources": not explicit_glass,
+    "native_video_api_references": "AVPlayerLooper" in view_source and "AVPlayerLayer" in view_source,
     "no_web_ui_or_screenshot_substitution": all(token not in view_source for token in ["WKWebView", ".blur(", "IMG_131", "generated_images"]),
 }
 report = {
@@ -82,8 +89,9 @@ report = {
     "metadata_ids": len(metadata),
     "missing_metadata_ids": missing_ids,
     "media_errors": media_errors,
+    "explicit_glass_usages": explicit_glass,
     "swift_tests_defined_but_not_executed": sum(len(re.findall(r"func test\w+\(", p.read_text("utf8"))) for p in tests),
-    "unverified": ["Swift typecheck and XCTest on a Swift host", "Xcode 26+ simulator build", "iPhone native Liquid Glass visuals and all interactions", "background notification delivery and AVPlayer looping", "Dynamic Type, VoiceOver, light/dark and orientation"],
+    "unverified": ["Swift typecheck and XCTest on a Swift host", "Xcode 26+ simulator build", "iPhone button materials, visuals and all interactions", "background notification delivery and AVPlayer looping", "Dynamic Type, VoiceOver, light/dark and orientation"],
     "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files + [project_path, metadata_path]},
 }
 output = options.output

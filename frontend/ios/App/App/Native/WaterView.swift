@@ -33,40 +33,42 @@ struct WaterView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                WaterBackground(progress: wellness.waterFill, active: waterActive)
-                GeometryReader { geometry in
-                    Group {
-                        if geometry.size.width > geometry.size.height * 1.35 {
-                            // Short, wide safe areas use both columns instead of
-                            // putting the controls below an oversized header.
-                            HStack(spacing: 20) {
-                                VStack(spacing: 8) {
-                                    progressHeader(compact: true)
-                                    if !scheduledDoses.isEmpty { supplementReminder(compact: true) }
-                                }
+            GeometryReader { geometry in
+                // The host owns the tab-bar reservation. Only this foreground
+                // GeometryReader defines our viewport; the full-screen water
+                // is a background and cannot enlarge the content's proposal.
+                let landscape = geometry.size.width > geometry.size.height * 1.35
+                let contentWidth = min(landscape ? 1000 : 560, max(0, geometry.size.width - 32))
+                let contentHeight = max(0, geometry.size.height - 16)
+                Group {
+                    if landscape {
+                        // Short, wide safe areas use both columns instead of
+                        // putting the controls below an oversized header.
+                        HStack(spacing: 20) {
+                            VStack(spacing: 8) {
+                                progressHeader(compact: true)
+                                if !scheduledDoses.isEmpty { supplementReminder(compact: true) }
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity)
+                            quickRecorder(compact: true)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity)
-                                quickRecorder(compact: true)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity)
-                            }
-                        } else {
-                            // Test complete intrinsic content heights. A shorter
-                            // viewport changes layout, never crops content or
-                            // disables the horizontal selectors and sheet lists.
-                            ViewThatFits(in: .vertical) {
-                                dashboard(compact: false)
-                                dashboard(compact: true)
-                            }
+                        }
+                    } else {
+                        // The layout reports the complete intrinsic height,
+                        // excluding expandable spacers, to this fit decision.
+                        ViewThatFits(in: .vertical) {
+                            dashboard(compact: false)
+                            dashboard(compact: true)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: geometry.size.width > geometry.size.height * 1.35 ? 1000 : 560,
-                           maxHeight: .infinity)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(width: contentWidth, height: contentHeight, alignment: .top)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            .background {
+                WaterBackground(progress: wellness.waterFill, active: waterActive)
             }
             .navigationTitle("喝水")
             .navigationBarTitleDisplayMode(.inline)
@@ -89,13 +91,11 @@ struct WaterView: View {
     }
 
     private func dashboard(compact: Bool) -> some View {
-        VStack(spacing: compact ? 6 : 12) {
+        WaterDashboardLayout(spacing: compact ? 6 : 12) {
             progressHeader(compact: compact).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: compact ? 0 : 12)
             if !scheduledDoses.isEmpty {
                 supplementReminder(compact: compact).fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: compact ? 0 : 12)
             quickRecorder(compact: compact).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -122,7 +122,7 @@ struct WaterView: View {
             } else {
                 Button { showSettings = true } label: {
                     Label("设置每日目标", systemImage: "slider.horizontal.3").font(.subheadline)
-                }.buttonStyle(.glass)
+                }.buttonStyle(WaterActionButtonStyle())
                 Text("未设目标 · 水位满刻度 \(wellness.state.waterScaleML) mL")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -269,7 +269,7 @@ struct WaterView: View {
                 .font(.subheadline.weight(.semibold)).fixedSize()
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(WaterActionButtonStyle())
         .accessibilityLabel("选择容量，当前 \(amount) 毫升")
     }
 
@@ -281,7 +281,7 @@ struct WaterView: View {
                 .font(.headline).fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.glassProminent)
+        .buttonStyle(WaterActionButtonStyle(prominent: true))
         .accessibilityLabel("记录 \(drink.name) \(amount) 毫升")
     }
 
@@ -293,7 +293,7 @@ struct WaterView: View {
             }
             .font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 4)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(WaterActionButtonStyle())
         .accessibilityLabel("自定义记录")
         .accessibilityHint("修改容量或补记之前喝的饮品")
     }
@@ -307,9 +307,55 @@ struct WaterView: View {
                 }
                 .font(.subheadline).frame(minHeight: 44)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(WaterActionButtonStyle())
             .accessibilityLabel("撤销刚才记录的 \(entry.drink.name) \(entry.milliliters) 毫升")
         }
+    }
+}
+
+// Measures all real content before choosing a density, then anchors the action
+// block to the bottom of the host-provided viewport. No guessed tab-bar height.
+private struct WaterDashboardLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        let requiredHeight = heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1))
+        return CGSize(width: width, height: max(requiredHeight, proposal.height ?? requiredHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)) }
+        guard let last = sizes.indices.last else { return }
+        let freeSpace = max(0, bounds.height - sizes.reduce(0) { $0 + $1.height })
+        let gap = last > 0 ? freeSpace / CGFloat(last) : 0
+        var y = bounds.minY
+        for index in sizes.indices {
+            // Use the measured height for both fitting and placement. The last
+            // block ends at bounds.maxY whenever the candidate fits.
+            subviews[index].place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading,
+                                  proposal: ProposedViewSize(width: bounds.width, height: sizes[index].height))
+            y += sizes[index].height + gap
+        }
+    }
+}
+
+// Content actions intentionally use solid color / plain labels. Navigation bars,
+// menus and sheet chrome keep their native system appearance.
+private struct WaterActionButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, prominent ? 14 : 10)
+            .padding(.vertical, 6)
+            .frame(minWidth: 44, minHeight: 44)
+            .foregroundStyle(configuration.role == .destructive ? Color.red : (prominent ? Color.white : Color.primary))
+            .background(prominent ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 16))
+            .contentShape(.rect)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
     }
 }
 
@@ -490,9 +536,11 @@ struct DoseSheet: View {
                             if let record = store.wellness.state.record(for: instance) {
                                 Label("已记录 · \(record.takenAt.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
                                     .foregroundStyle(.secondary)
-                                Button("撤销这次记录", role: .destructive) { store.wellness.undoDose(instance.id) }.buttonStyle(.glass)
+                                Button("撤销这次记录", role: .destructive) { store.wellness.undoDose(instance.id) }
+                                    .buttonStyle(WaterActionButtonStyle())
                             } else {
-                                Button("确认这次已服用") { store.wellness.recordDose(instance) }.buttonStyle(.glassProminent)
+                                Button("确认这次已服用") { store.wellness.recordDose(instance) }
+                                    .buttonStyle(WaterActionButtonStyle(prominent: true))
                             }
                         }.padding(.vertical, 6)
                     }

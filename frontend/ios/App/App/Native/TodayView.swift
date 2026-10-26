@@ -13,33 +13,35 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && selectedSupplement == nil)
-                GeometryReader { geometry in
-                    Group {
-                        if geometry.size.width > geometry.size.height * 1.5 {
-                            HStack(alignment: .top, spacing: 16) {
-                                VStack(spacing: 10) {
-                                    workoutSummary(compact: true)
-                                    supplements(compact: true)
-                                }.frame(maxWidth: .infinity)
-                                hydration(compact: true).frame(maxWidth: .infinity)
-                            }
-                        } else {
-                            // Measure both complete layouts. Neither candidate crops
-                            // cards or removes content to fit a shorter safe area.
-                            ViewThatFits(in: .vertical) {
-                                dashboard(compact: false).fixedSize(horizontal: false, vertical: true)
-                                dashboard(compact: true).fixedSize(horizontal: false, vertical: true)
-                            }
+            GeometryReader { geometry in
+                let wide = geometry.size.width > geometry.size.height * 1.5
+                let contentWidth = min(wide ? 1000 : 600, max(0, geometry.size.width - 32))
+                let contentHeight = max(0, geometry.size.height - 16)
+                Group {
+                    if wide {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 10) {
+                                workoutSummary(compact: true)
+                                supplements(compact: true)
+                            }.frame(maxWidth: .infinity)
+                            hydration(compact: true).frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        // Measure both complete layouts. Neither candidate crops
+                        // cards or removes content to fit a shorter safe area.
+                        ViewThatFits(in: .vertical) {
+                            dashboard(compact: false).fixedSize(horizontal: false, vertical: true)
+                            dashboard(compact: true).fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: geometry.size.width > geometry.size.height * 1.5 ? 1000 : 600,
-                           maxHeight: .infinity, alignment: .top)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
+                .frame(width: contentWidth, height: contentHeight, alignment: .top)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            .background {
+                // Background can extend under navigation; the foreground above
+                // uses only the hosting controller's actual safe viewport.
+                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && selectedSupplement == nil)
             }
             .navigationTitle("今天")
             .navigationBarTitleDisplayMode(.inline)
@@ -64,7 +66,9 @@ struct TodayView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("设置", systemImage: "gearshape") { showSettings = true }
+                        .buttonStyle(.plain)
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showSettings) { WellnessSettingsSheet() }
             .sheet(item: $selectedSupplement) { supplement in DoseSheet(supplement: supplement) }
@@ -155,8 +159,7 @@ struct TodayView: View {
                 Button(action: confirmWater) {
                     Text("确定").font(.body.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .buttonStyle(HomeFunctionButtonStyle(prominent: true))
                 .accessibilityLabel("确认添加 \(pendingWaterML) 毫升饮水")
                 .accessibilityIdentifier("home-water-confirm")
             }
@@ -222,10 +225,10 @@ struct TodayView: View {
     @ViewBuilder private func supplementAction(_ supplement: Supplement, hasInstances: Bool, complete: Bool) -> some View {
         if hasInstances {
             Button(complete ? "已服用" : "记录") { selectedSupplement = supplement }
-                .buttonStyle(.glass).controlSize(.large).fixedSize(horizontal: true, vertical: false)
+                .buttonStyle(HomeFunctionButtonStyle()).fixedSize(horizontal: true, vertical: false)
                 .accessibilityLabel("\(supplement.name)\(complete ? "查看服用记录" : "记录服用")")
         } else if supplement == .d && wellness.state.settings.dWeekday == nil {
-            Button("设置") { showSettings = true }.buttonStyle(.glass).controlSize(.large)
+            Button("设置") { showSettings = true }.buttonStyle(HomeFunctionButtonStyle())
                 .accessibilityLabel("设置维生素 D 每周服用日")
         }
     }
@@ -242,6 +245,24 @@ struct TodayView: View {
             return "今日 \(done)/\(instances.count) · 待服用 \(next.label)"
         }
         return "今日 \(done)/\(instances.count) · 时点待设置"
+    }
+}
+
+// Content actions use solid color/fill, with one prominent confirmation action.
+// The navigation bar and tab bar keep their system-provided materials.
+private struct HomeFunctionButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .foregroundStyle(prominent ? Color.white : Color.accentColor)
+            .background(prominent ? Color.accentColor : Color(uiColor: .tertiarySystemFill),
+                        in: RoundedRectangle(cornerRadius: 14))
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)
     }
 }
 

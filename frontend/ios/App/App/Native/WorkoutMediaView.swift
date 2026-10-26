@@ -17,14 +17,16 @@ struct WorkoutMediaView: View {
             } else { WorkoutThumbnail(record: record) }
             HStack {
                 if let minimize {
-                    Button("缩小", systemImage: "arrow.down.right.and.arrow.up.left", action: minimize).buttonStyle(.glass)
+                    Button("缩小", systemImage: "arrow.down.right.and.arrow.up.left", action: minimize)
                 }
                 Spacer()
                 if record?.mediaURL(animated: true) != nil {
                     Button(playing ? "点按暂停" : "点按播放", systemImage: playing ? "pause.fill" : "play.fill") { playing.toggle() }
-                        .buttonStyle(.glass)
                 }
-            }.font(.caption).padding(10)
+            }
+            .buttonStyle(.borderedProminent).controlSize(.large)
+            .tint(Color(uiColor: .darkGray)).foregroundStyle(.white)
+            .font(.caption).padding(10)
         }
         .aspectRatio(1.22, contentMode: .fit)
         .background(.white).clipShape(.rect(cornerRadius: 20))
@@ -53,7 +55,7 @@ struct WorkoutThumbnail: View {
 }
 
 // AVQueuePlayer/AVPlayerLooper keep the actual bundled demonstration looping. UIKit owns
-// video rendering; the transport buttons above are native SwiftUI Liquid Glass controls.
+// video rendering; transport buttons use opaque fills to stay legible over the video.
 private struct WorkoutLoopPlayer: UIViewRepresentable {
     var url: URL
     var playing: Bool

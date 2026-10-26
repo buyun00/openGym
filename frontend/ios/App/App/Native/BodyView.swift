@@ -39,10 +39,13 @@ struct BodyView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) {
-                    ForEach(BodySection.allCases, id: \.self) { section in
-                        GeometryReader { viewport in
+            // Measure the safe layout region ONCE, outside the scroll view. Each target
+            // and the scrolling viewport use that same height. Do not subtract bar
+            // insets again inside each page or let the scroll view extend under them.
+            GeometryReader { viewport in
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(BodySection.allCases, id: \.self) { section in
                             GroupBox {
                                 ViewThatFits(in: .vertical) {
                                     if !typeSize.isAccessibilitySize {
@@ -55,24 +58,28 @@ struct BodyView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
+                            .frame(width: viewport.size.width, height: viewport.size.height)
+                            .id(section)
+                            .accessibilityIdentifier("body-page-\(section.id)")
                         }
-                        // The nearest container is this ScrollView. Its native safe-area
-                        // height already excludes the navigation bar and RootView's tab inset.
-                        // Padding is INSIDE the page so all four targets stay one viewport apart.
-                        .containerRelativeFrame(.vertical)
-                        .id(section)
-                        .accessibilityIdentifier("body-page-\(section.id)")
-                    }
-                }.scrollTargetLayout()
+                    }.scrollTargetLayout()
+                }
+                .frame(width: viewport.size.width, height: viewport.size.height)
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: $visibleSection, anchor: .top)
+                .scrollIndicators(.hidden)
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $visibleSection, anchor: .top)
-            .scrollIndicators(.hidden)
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("身体")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("身体").font(.title2.bold()).fixedSize()
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .principal) { pageNavigation }
+                    .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("记录", systemImage: "plus") {
                         Button("体重与体脂", systemImage: "scalemass") { entry = .weight() }
@@ -96,27 +103,34 @@ struct BodyView: View {
     }
 
     private var pageNavigation: some View {
-        HStack(spacing: 8) {
-            Text("身体").font(.headline).fixedSize()
-            ViewThatFits(in: .horizontal) {
-                if !typeSize.isAccessibilitySize {
-                    Picker("身体页面", selection: pageSelection) {
-                        ForEach(BodySection.allCases) { Text($0.rawValue).tag($0) }
+        ViewThatFits(in: .horizontal) {
+            if !typeSize.isAccessibilitySize {
+                HStack(spacing: 2) {
+                    ForEach(BodySection.allCases) { section in
+                        let selected = (visibleSection ?? .weight) == section
+                        Button { pageSelection.wrappedValue = section } label: {
+                            Text(section.rawValue)
+                                .font(.subheadline.weight(selected ? .bold : .regular))
+                                .foregroundStyle(selected ? Color.primary : Color.secondary)
+                                .underline(selected)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
                     }
-                    .pickerStyle(.segmented)
-                    .fixedSize(horizontal: true, vertical: false)
-                }
-                // Keep all four destinations available when a segmented picker cannot fit.
-                Menu {
-                    Picker("身体页面", selection: pageSelection) {
-                        ForEach(BodySection.allCases) { Label($0.rawValue, systemImage: $0.symbol).tag($0) }
-                    }
-                } label: {
-                    Label((visibleSection ?? .weight).rawValue, systemImage: "chevron.up.chevron.down")
-                }
+                }.fixedSize(horizontal: true, vertical: false)
             }
-            .accessibilityHint("选择后翻到对应整页；上下滑动也会更新所选页面")
+            // Native menu keeps every destination readable at large accessibility sizes.
+            Menu {
+                Picker("身体页面", selection: pageSelection) {
+                    ForEach(BodySection.allCases) { Label($0.rawValue, systemImage: $0.symbol).tag($0) }
+                }
+            } label: {
+                Label((visibleSection ?? .weight).rawValue, systemImage: "chevron.up.chevron.down")
+            }.buttonStyle(.plain)
         }
+        .accessibilityHint("选择后翻到对应整页；上下滑动也会更新所选页面")
     }
 
     @ViewBuilder private func pageContent(_ section: BodySection, compact: Bool, height: CGFloat) -> some View {
@@ -158,7 +172,7 @@ struct BodyView: View {
             Label(title, systemImage: "arrow.up.right.square")
                 .frame(maxWidth: .infinity)
                 .fixedSize(horizontal: false, vertical: true)
-        }.buttonStyle(.glass)
+        }.buttonStyle(.bordered)
     }
 
     private func weightPage(compact: Bool, height: CGFloat) -> some View {
@@ -193,7 +207,7 @@ struct BodyView: View {
     }
 
     @ViewBuilder private var weightActions: some View {
-        Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.glassProminent)
+        Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.borderedProminent)
         detailsButton(.weight, title: "体重与围度详情")
     }
 
@@ -274,7 +288,7 @@ struct BodyView: View {
                         Text(day, format: .dateTime.year().month().day().weekday())
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
-                    }.buttonStyle(.glass)
+                    }.buttonStyle(.bordered)
                     .accessibilityHint("打开这一天的训练、称重与围度明细")
                 }
             }
@@ -299,7 +313,7 @@ struct BodyView: View {
                 if section == .records { selectedRecordDate = nil }
                 detail = section
             }
-                .buttonStyle(.glass).fixedSize(horizontal: false, vertical: true)
+                .buttonStyle(.bordered).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -394,11 +408,11 @@ private struct BodyDetailSheet: View {
             }.pickerStyle(.menu)
             if !weights.isEmpty { weightChart }
             else if !allWeights.isEmpty { Text("所选时间内没有称重记录，试试选择“全部”。").foregroundStyle(.secondary) }
-            Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.glassProminent)
+            Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.borderedProminent)
             Button(store.targetKg.map { "目标 \(formatKg($0)) kg" } ?? "设置目标", systemImage: "scope") {
                 goalText = store.targetKg.map(formatKg) ?? ""
                 showGoal = true
-            }.buttonStyle(.glass)
+            }.buttonStyle(.bordered)
             composition
             DisclosureGroup("称重记录 · \(allWeights.count)条") {
                 ForEach(Array(allWeights.reversed().prefix(weighInLimit))) { point in
@@ -566,7 +580,7 @@ private struct BodyDetailSheet: View {
                 }
                 if let fat = latest.bodyFatPercent { LabeledContent("体脂率", value: "\(formatKg(fat))%") }
             } else { Text("还没有围度记录").foregroundStyle(.secondary) }
-            Button("记围度", systemImage: "plus") { entry = .measurement() }.buttonStyle(.glass)
+            Button("记围度", systemImage: "plus") { entry = .measurement() }.buttonStyle(.bordered)
             Text("按日期回看围度记录，请在“记录”页的明细中选择“围度”。").font(.caption).foregroundStyle(.secondary)
         }
     }

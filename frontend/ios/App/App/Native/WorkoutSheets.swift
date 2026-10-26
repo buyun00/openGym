@@ -117,7 +117,7 @@ private struct WorkoutSheetContent: View {
                 } else { Text("已完成 \(store.activeDoneCount) 组").foregroundStyle(.secondary) }
                 Button { store.finishActive(); if store.active == nil { close() } } label: {
                     Label("结束并保存", systemImage: "flag.checkered").frame(maxWidth: .infinity, minHeight: 28)
-                }.buttonStyle(.glassProminent).controlSize(.large)
+                }.buttonStyle(.borderedProminent).controlSize(.large)
 
                 Button(action: close) {
                     Text("继续训练").frame(maxWidth: .infinity, minHeight: 28)

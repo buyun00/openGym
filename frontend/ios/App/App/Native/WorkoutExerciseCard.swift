@@ -32,11 +32,15 @@ struct WorkoutExerciseCard: View {
                 if !compact && store.workoutPreferences.media == .mini {
                     Button { store.updateWorkoutPreferences { $0.media = .full } } label: {
                         WorkoutThumbnail(record: metadata).frame(width: 56, height: 56).clipShape(.rect(cornerRadius: 12))
-                            .overlay(alignment: .bottomTrailing) { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.caption2).padding(5).glassEffect() }
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.caption2)
+                                    .foregroundStyle(.primary).padding(5)
+                                    .background(Color(uiColor: .systemBackground), in: .circle)
+                            }
                     }.buttonStyle(.plain).accessibilityLabel("放大动作演示")
                 }
                 Text(title).font(compact ? .headline : .title3.bold()).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-                Button("动作选项", systemImage: "ellipsis") { options = true }.labelStyle(.iconOnly).buttonStyle(.glass).controlSize(.large)
+                Button("动作选项", systemImage: "ellipsis") { options = true }.labelStyle(.iconOnly).buttonStyle(.bordered).controlSize(.large)
             }
             if !compact {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -51,7 +55,7 @@ struct WorkoutExerciseCard: View {
                 }
                 if let note = exercise.note, !note.isEmpty {
                     Text(note).font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14).background(.regularMaterial, in: .rect(cornerRadius: 16))
+                        .padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
                 }
                 if let previous = WorkoutLogic.previous(exercise.exerciseId, mode: mode, in: store.workouts, forProgression: false),
                    let last = previous.1.sets.last(where: \.done) {
@@ -59,8 +63,9 @@ struct WorkoutExerciseCard: View {
                         HStack(spacing: 5) {
                             Text("上次 (\(previous.0.formatted(.dateTime.month().day()))): \(WorkoutLogic.summary(last, mode: mode))")
                             Image(systemName: "clock.arrow.circlepath")
-                        }.font(.caption).foregroundStyle(.secondary)
-                    }.buttonStyle(.glass)
+                        }.font(.caption).foregroundStyle(.primary)
+                            .frame(minHeight: 44, alignment: .leading).contentShape(.rect)
+                    }.buttonStyle(.plain)
                 }
             }
             VStack(spacing: 14) {
@@ -68,7 +73,7 @@ struct WorkoutExerciseCard: View {
                     WorkoutSetEditor(exercise: exercise, set: set, index: index + 1, mode: mode, incline: metadata?.incline ?? false)
                 }
                 Button("加一组", systemImage: "plus") { store.addSet(exercise: exercise.id) }
-                    .buttonStyle(.glass).frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.bordered).frame(maxWidth: .infinity, alignment: .leading)
             }.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
         }
         .sheet(isPresented: $options) {
@@ -117,11 +122,11 @@ private struct WorkoutSetEditor: View {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             Text("保持 \(workoutClock(end.timeIntervalSince(context.date)))").monospacedDigit()
                         }
-                        Button("停止计时") { timerEnd = nil }.buttonStyle(.glass)
+                        Button("停止计时") { timerEnd = nil }.buttonStyle(.bordered)
                     } else {
                         Button("开始计时", systemImage: "timer") {
                             timerEnd = Date().addingTimeInterval(set.seconds ?? 45)
-                        }.buttonStyle(.glass)
+                        }.buttonStyle(.borderedProminent)
                     }
                 }
             }
