@@ -7,37 +7,27 @@ struct WorkoutView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            Group {
                 if let session = store.active {
-                    Section {
-                        Button { presenting = true } label: { Label("继续：\(session.name)", systemImage: "play.fill") }
-                        Text("已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组").foregroundStyle(.secondary)
-                    }
-                } else {
-                    if !store.todayRoutines.isEmpty {
-                        Section("今天的计划") {
-                            ForEach(store.todayRoutines) { routine in
-                                Button { store.start([routine]) } label: { routineLabel(routine) }
-                            }
-                            if store.todayRoutines.count > 1 {
-                                Button("开始今天的全部训练", systemImage: "play.fill") { store.startToday() }
-                            }
+                    List {
+                        Section {
+                            Button { presenting = true } label: { Label("继续：\(session.name)", systemImage: "play.fill") }
+                            Text("已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组").foregroundStyle(.secondary)
                         }
                     }
-                    Section("其他训练日") {
-                        ForEach(store.routines.filter { routine in !store.todayRoutines.contains(where: { $0.id == routine.id }) }) { routine in
-                            Button { store.start([routine]) } label: { routineLabel(routine) }
-                        }
-                        if store.routines.isEmpty {
-                            ContentUnavailableView("还没有计划", systemImage: "calendar", description: Text("可以先去计划页安排，或从自由训练开始。"))
-                        }
-                    }
-                    Section {
-                        Button("自由训练，边练边加动作", systemImage: "plus") { store.startFreestyle() }
+                } else { chooserList }
+            }
+            .navigationTitle("开始锻炼")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if store.active == nil && !presenting {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("返回首页", systemImage: "chevron.left", action: returnToToday)
+                            .labelStyle(.titleAndIcon)
+                            .accessibilityHint("也可在训练选择列表中向左划返回")
                     }
                 }
             }
-            .navigationTitle("开始锻炼")
         }
         .tint(.green)
         .onAppear { if store.tab == .workout && store.active != nil { presenting = true } }
@@ -47,6 +37,50 @@ struct WorkoutView: View {
         .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && !presenting }, set: { if !$0 { store.saveError = nil } })) {
             Button("好") { store.saveError = nil }
         } message: { Text(store.saveError ?? "") }
+    }
+
+    private var chooserList: some View {
+        List {
+            if !store.todayRoutines.isEmpty {
+                Section("今天的计划") {
+                    ForEach(store.todayRoutines) { routine in
+                        Button { store.start([routine]) } label: { routineLabel(routine) }
+                    }
+                    if store.todayRoutines.count > 1 {
+                        Button("开始今天的全部训练", systemImage: "play.fill") { store.startToday() }
+                    }
+                }
+            }
+            Section("其他训练日") {
+                ForEach(store.routines.filter { routine in !store.todayRoutines.contains(where: { $0.id == routine.id }) }) { routine in
+                    Button { store.start([routine]) } label: { routineLabel(routine) }
+                }
+                if store.routines.isEmpty {
+                    ContentUnavailableView("还没有计划", systemImage: "calendar", description: Text("可以先去计划页安排，或从自由训练开始。"))
+                }
+            }
+            Section {
+                Button("自由训练，边练边加动作", systemImage: "plus") { store.startFreestyle() }
+            }
+        }
+        // This list has vertical scrolling and buttons only. Keep the gesture off
+        // the navigation bar, active workout, and its horizontal exercise controls.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 32, coordinateSpace: .local)
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let dy = abs(value.translation.height)
+                    // Intentionally leftward: short drags, right swipes and vertical
+                    // scrolling must not navigate, even if predicted momentum is large.
+                    guard dx <= -100, dy <= 32, -dx >= dy * 3 else { return }
+                    returnToToday()
+                }
+        )
+    }
+
+    private func returnToToday() {
+        guard store.tab == .workout, store.active == nil, !presenting else { return }
+        store.tab = .today
     }
 
     private func routineLabel(_ routine: Routine) -> some View {
