@@ -1,5 +1,14 @@
 import SwiftUI
 
+// Align completion to the editable value, excluding the unit label above it.
+private enum WorkoutInputCenter: AlignmentID {
+    static func defaultValue(in dimensions: ViewDimensions) -> CGFloat { dimensions[VerticalAlignment.center] }
+}
+
+private extension VerticalAlignment {
+    static let workoutInputCenter = VerticalAlignment(WorkoutInputCenter.self)
+}
+
 struct WorkoutExerciseCard: View {
     @Environment(GymStore.self) private var store
     var exercise: WorkoutExercise
@@ -60,7 +69,7 @@ struct WorkoutExerciseCard: View {
                 }
                 Button("加一组", systemImage: "plus") { store.addSet(exercise: exercise.id) }
                     .buttonStyle(.glass).frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(10).background(.regularMaterial, in: .rect(cornerRadius: 20))
+            }.padding(10).background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
         }
         .sheet(isPresented: $options) {
             WorkoutExerciseOptions(exerciseId: exercise.id).presentationDragIndicator(.visible)
@@ -94,10 +103,10 @@ private struct WorkoutSetEditor: View {
             if typeSize.isAccessibilitySize { verticalRow }
             else {
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .bottom, spacing: 6) {
-                        rowMenu.frame(width: 20).padding(.bottom, 8)
-                        ForEach(metrics, id: \.self) { metric in field(metric).frame(minWidth: 84) }
-                        checkButton.frame(width: 40).padding(.bottom, 2)
+                    HStack(alignment: .workoutInputCenter, spacing: 6) {
+                        rowMenu.frame(width: 20)
+                        ForEach(metrics, id: \.self) { metric in field(metric).frame(minWidth: 80) }
+                        checkButton
                     }
                     verticalRow
                 }
@@ -135,9 +144,15 @@ private struct WorkoutSetEditor: View {
     }
 
     private var verticalRow: some View {
-        VStack(alignment: .leading) {
-            HStack { rowMenu; Text("第 \(index) 组"); Spacer(); checkButton }
-            ForEach(metrics, id: \.self) { field($0) }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack { rowMenu; Text("第 \(index) 组").font(.subheadline); Spacer() }
+            ForEach(metrics, id: \.self) { metric in
+                HStack(alignment: .workoutInputCenter, spacing: 8) {
+                    field(metric, spacious: true)
+                    if metric == metrics.last { checkButton }
+                    else { Color.clear.frame(width: 44, height: 44).accessibilityHidden(true) }
+                }
+            }
         }
     }
 
@@ -154,14 +169,17 @@ private struct WorkoutSetEditor: View {
             timerEnd = nil
             store.toggleSet(exercise: exercise.id, set: set.id)
         } label: {
-            Image(systemName: set.done ? "checkmark.circle.fill" : "circle").font(.title2).frame(minHeight: 40)
+            Image(systemName: set.done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 28, weight: .regular))
+                .frame(width: 44, height: 44).contentShape(.rect)
         }
-        .buttonStyle(.glass).tint(set.done ? .green : .gray)
+        .buttonStyle(.plain).foregroundStyle(set.done ? Color.green : Color.secondary)
         .accessibilityLabel(set.done ? "取消第 \(index) 组完成" : "完成第 \(index) 组")
+        .accessibilityValue(set.done ? "已完成" : "未完成")
     }
 
-    private func field(_ metric: WorkoutMetric) -> some View {
-        WorkoutNumberField(metric: metric, value: metric.value(in: set)) { value in
+    private func field(_ metric: WorkoutMetric, spacious: Bool = false) -> some View {
+        WorkoutNumberField(metric: metric, value: metric.value(in: set), spacious: spacious) { value in
             store.setMetric(metric, exercise: exercise.id, set: set.id, value: value)
         }
     }
@@ -170,27 +188,33 @@ private struct WorkoutSetEditor: View {
 private struct WorkoutNumberField: View {
     var metric: WorkoutMetric
     var value: Double?
+    var spacious = false
     var changed: (Double?) -> Void
     @State private var draft = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(metric.title).font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            Text(metric.title).font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(spacious ? nil : 1).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 0) {
-                Button { step(-1) } label: { Image(systemName: "minus").frame(width: 24, height: 44) }.accessibilityLabel("减少\(metric.title)")
+                Button { step(-1) } label: { Image(systemName: "minus").frame(width: spacious ? 44 : 24, height: 44) }.accessibilityLabel("减少\(metric.title)")
                 TextField("—", text: $draft)
-                    .keyboardType(.decimalPad).multilineTextAlignment(.center).monospacedDigit().focused($focused)
-                    .accessibilityLabel(metric.title).frame(minWidth: 32)
+                    .textFieldStyle(.plain)
+                    .keyboardType(metric == .reps || metric == .seconds ? .numberPad : .decimalPad)
+                    .multilineTextAlignment(.center).monospacedDigit().focused($focused)
+                    .accessibilityLabel(metric.title).frame(minWidth: 32, minHeight: 44)
                     .onChange(of: draft) { _, text in
                         guard focused else { return }
                         if text.isEmpty { changed(nil) }
                         else if let number = Double(text.replacingOccurrences(of: ",", with: ".")), number.isFinite { changed(number) }
                     }
-                Button { step(1) } label: { Image(systemName: "plus").frame(width: 24, height: 44) }.accessibilityLabel("增加\(metric.title)")
+                Button { step(1) } label: { Image(systemName: "plus").frame(width: spacious ? 44 : 24, height: 44) }.accessibilityLabel("增加\(metric.title)")
             }
             .buttonStyle(.plain).font(.subheadline)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
+            .background(Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(focused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: focused ? 1.5 : 0.5).allowsHitTesting(false) }
+            .alignmentGuide(.workoutInputCenter) { $0[VerticalAlignment.center] }
         }
         .onAppear { refresh() }
         .onChange(of: value) { _, _ in if !focused { refresh() } }

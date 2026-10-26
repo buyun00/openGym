@@ -4,49 +4,69 @@ import UIKit
 struct RootView: View {
     @State private var store = GymStore()
     @State private var navigationTab: AppTab = .today
+    @State private var visitedTabs: Set<AppTab> = [.today]
     @State private var keyboardVisible = false
+    @State private var workoutRequest = 0
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
-            TabView(selection: Binding(
-                get: { store.tab == .workout ? navigationTab : store.tab },
-                set: { store.tab = $0; navigationTab = $0 }
-            )) {
-                Tab("今天", systemImage: "sun.max", value: AppTab.today) {
-                    TodayView().toolbar(.hidden, for: .tabBar)
-                }
-                Tab("计划", systemImage: "calendar", value: AppTab.plan) {
-                    PlanView().toolbar(.hidden, for: .tabBar)
-                }
-                Tab("身体", systemImage: "figure.strengthtraining.traditional", value: AppTab.body) {
-                    BodyView().toolbar(.hidden, for: .tabBar)
-                }
-                Tab("喝水", systemImage: "drop", value: AppTab.water) {
-                    WaterView().toolbar(.hidden, for: .tabBar)
+            // Keep each visited NavigationStack alive without rendering a second,
+            // hidden system tab bar. UIKit below owns the actual tab control.
+            ForEach(NativeNavigationTabs.destinations, id: \.tab) { destination in
+                if visitedTabs.contains(destination.tab) {
+                    page(destination.tab)
+                        .opacity(store.tab == destination.tab ? 1 : 0)
+                        .allowsHitTesting(store.tab == destination.tab)
+                        .accessibilityHidden(store.tab != destination.tab)
                 }
             }
-            .opacity(store.tab == .workout ? 0 : 1)
-            .allowsHitTesting(store.tab != .workout)
-            .accessibilityHidden(store.tab == .workout)
 
             // The circular action opens the existing workout flow outside the
             // four navigation tabs. Their NavigationStacks stay mounted below.
             if store.tab == .workout {
-                WorkoutView()
+                WorkoutView().id(workoutRequest)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !keyboardVisible {
-                HomeDock(selection: store.tab, hasWorkout: store.active != nil) { store.tab = $0 }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 6)
+                HStack(spacing: 4) {
+                    Button {
+                        // Reopening an existing workout is an action even when
+                        // its chooser is already visible under the tab bar.
+                        workoutRequest += 1
+                        store.tab = .workout
+                    } label: {
+                        Image(systemName: store.active == nil ? "plus" : "play.fill")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .accessibilityLabel(store.active == nil ? "开始训练" : "继续训练")
+                    .accessibilityIdentifier("start-workout-action")
+
+                    NativeNavigationTabs(selection: navigationTab) { tab in
+                        visitedTabs.insert(tab)
+                        navigationTab = tab
+                        store.tab = tab
+                    }
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 4)
+                .padding(.top, 4)
+                .padding(.bottom, 2)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
             }
         }
         .environment(store)
         .onChange(of: store.tab) { _, value in
-            if value != .workout { navigationTab = value }
+            if value != .workout {
+                visitedTabs.insert(value)
+                navigationTab = value
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
@@ -72,65 +92,80 @@ struct RootView: View {
             Text(store.wellness.errorMessage ?? "")
         }
     }
+
+    @ViewBuilder private func page(_ tab: AppTab) -> some View {
+        switch tab {
+        case .today: TodayView()
+        case .plan: PlanView()
+        case .body: BodyView()
+        case .water: WaterView()
+        case .workout: EmptyView() // Training is an action, never a UITabBarItem.
+        }
+    }
 }
 
-// Native SwiftUI controls/materials, composed as two separate shapes. This is
-// intentionally not a prominent item inside UITabBar or a geometry overlay on it.
-private struct HomeDock: View {
-    var selection: AppTab
-    var hasWorkout: Bool
-    var select: (AppTab) -> Void
-    @Environment(\.dynamicTypeSize) private var dynamicType
-
-    var body: some View {
-        GlassEffectContainer(spacing: 6) {
-            HStack(spacing: 12) {
-                Button { select(.workout) } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 27, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 60, height: 60)
-                        .contentShape(.circle)
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.tint(.green).interactive(), in: .circle)
-                .overlay(alignment: .topTrailing) {
-                    if hasWorkout {
-                        Circle().fill(.orange).frame(width: 10, height: 10).padding(3).allowsHitTesting(false)
-                    }
-                }
-                .accessibilityLabel(hasWorkout ? "继续训练" : "开始训练")
-                .accessibilityIdentifier("start-workout-action")
-
-                HStack(spacing: 0) {
-                    destination(.today, title: "今天", symbol: "sun.max")
-                    destination(.plan, title: "计划", symbol: "calendar")
-                    destination(.body, title: "身体", symbol: "figure.strengthtraining.traditional")
-                    destination(.water, title: "喝水", symbol: "drop")
-                }
-                .padding(4)
-                .glassEffect(.regular, in: .capsule)
-            }
-        }
-        .frame(maxWidth: 540)
-        .frame(maxWidth: .infinity)
+// UITabBar is also a public standalone control. Keep its native background,
+// selection indicator, gestures and accessibility intact; only handle selection.
+// No extra glass layer or hand-drawn capsule is placed over the system control.
+private struct NativeNavigationTabs: UIViewRepresentable {
+    struct Destination {
+        let tab: AppTab
+        let title: String
+        let symbol: String
     }
 
-    private func destination(_ tab: AppTab, title: String, symbol: String) -> some View {
-        let selected = selection == tab
-        return Button { select(tab) } label: {
-            VStack(spacing: 3) {
-                Image(systemName: symbol).font(.system(size: 21, weight: .medium))
-                if !dynamicType.isAccessibilitySize { Text(title).font(.caption2).lineLimit(1) }
-            }
-            .foregroundStyle(selected ? Color.accentColor : Color.primary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background { if selected { Capsule().fill(Color.accentColor.opacity(0.14)) } }
-            .contentShape(.capsule)
+    static let destinations: [Destination] = [
+        .init(tab: .today, title: "今天", symbol: "sun.max"),
+        .init(tab: .plan, title: "计划", symbol: "calendar"),
+        .init(tab: .body, title: "身体", symbol: "figure.strengthtraining.traditional"),
+        .init(tab: .water, title: "喝水", symbol: "drop")
+    ]
+
+    var selection: AppTab
+    var select: (AppTab) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(select: select) }
+
+    func makeUIView(context: Context) -> UITabBar {
+        let bar = UITabBar(frame: .zero)
+        bar.delegate = context.coordinator
+        bar.itemPositioning = .fill
+        bar.setItems(Self.destinations.enumerated().map { index, destination in
+            let item = UITabBarItem(title: destination.title, image: UIImage(systemName: destination.symbol), tag: index)
+            item.accessibilityIdentifier = "navigation-\(destination.tab.rawValue)"
+            return item
+        }, animated: false)
+        bar.accessibilityIdentifier = "native-navigation-tabs"
+        updateSelection(bar)
+        return bar
+    }
+
+    func updateUIView(_ bar: UITabBar, context: Context) {
+        context.coordinator.select = select
+        updateSelection(bar)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITabBar, context: Context) -> CGSize? {
+        let width = proposal.width ?? 320
+        let fitted = uiView.sizeThatFits(CGSize(width: width, height: UIView.layoutFittingExpandedSize.height))
+        return CGSize(width: width, height: max(60, fitted.height))
+    }
+
+    private func updateSelection(_ bar: UITabBar) {
+        guard let index = Self.destinations.firstIndex(where: { $0.tab == selection }),
+              let items = bar.items, items.indices.contains(index) else { return }
+        // Do not reset items/selection during a native selection transition.
+        if bar.selectedItem !== items[index] { bar.selectedItem = items[index] }
+    }
+
+    final class Coordinator: NSObject, UITabBarDelegate {
+        var select: (AppTab) -> Void
+
+        init(select: @escaping (AppTab) -> Void) { self.select = select }
+
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard NativeNavigationTabs.destinations.indices.contains(item.tag) else { return }
+            select(NativeNavigationTabs.destinations[item.tag].tab)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

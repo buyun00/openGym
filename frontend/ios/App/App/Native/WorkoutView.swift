@@ -67,7 +67,10 @@ struct ActiveWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var sheet: WorkoutSheet?
+    @State private var discardSessionId: UUID?
+    @State private var confirmingDiscard = false
     @State private var flashing = false
     @State private var previousIdleDisabled: Bool?
 
@@ -81,12 +84,8 @@ struct ActiveWorkoutView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) {
-                        Color.clear.frame(height: 0).id("workout-top")
-                        ProgressView(value: Double(store.activeDoneCount), total: Double(max(1, store.activeSetCount)))
-                            .accessibilityLabel("训练进度")
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         if let session = store.active {
-                            exerciseSelector(session, proxy: proxy)
                             if session.exercises.isEmpty {
                                 ContentUnavailableView("添加第一个动作", systemImage: "figure.strengthtraining.traditional", description: Text("从动作库选择，或把一个训练日并入本次训练。"))
                             } else if layout == .cards, let exercise = selected {
@@ -101,9 +100,23 @@ struct ActiveWorkoutView: View {
                             footer(session)
                         }
                     }
-                    .padding(16).frame(maxWidth: 760).frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16)
+                    .frame(maxWidth: 760).frame(maxWidth: .infinity).id("workout-top")
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let session = store.active {
+                        VStack(spacing: 4) {
+                            if typeSize.isAccessibilitySize {
+                                Text(session.name).font(.headline).lineLimit(2)
+                                workoutStatus
+                            }
+                            if !session.exercises.isEmpty { exerciseSelector(session, proxy: proxy) }
+                        }
+                        .padding(.horizontal, 16).padding(.bottom, 4)
+                        .frame(maxWidth: .infinity).background(.bar)
+                    }
+                }
                 .onChange(of: store.active?.selectedExerciseId) { _, _ in
                     if layout == .cards { proxy.scrollTo("workout-top", anchor: .top) }
                 }
@@ -115,17 +128,27 @@ struct ActiveWorkoutView: View {
                 if let end = store.restEndsAt, end > Date() { WorkoutRestBar(end: end) }
             }
             .overlay { if flashing { Color.green.opacity(0.15).ignoresSafeArea().allowsHitTesting(false) } }
-            .sheet(item: $sheet) { destination in
-                WorkoutSessionSheet(destination: destination)
-                    .presentationDetents(destination == .finish ? [.height(310), .medium] : [.large])
+            .sheet(item: $sheet, onDismiss: sheetDidDismiss) { destination in
+                WorkoutSessionSheet(destination: destination, requestDiscard: requestDiscard)
+                    .presentationDetents(destination == .finish && !typeSize.isAccessibilitySize ? [.height(400), .large] : [.large])
                     .presentationDragIndicator(.visible)
             }
-            .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && sheet == nil }, set: { if !$0 { store.saveError = nil } })) {
+            .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && sheet == nil && discardSessionId == nil && !confirmingDiscard }, set: { if !$0 { store.saveError = nil } })) {
                 Button("好") { store.saveError = nil }
             } message: { Text(store.saveError ?? "") }
         }
         .tint(.green)
-        .onChange(of: store.active?.id) { _, id in if id == nil { dismiss() } }
+        .alert("放弃本次训练？", isPresented: $confirmingDiscard) {
+            Button("放弃不保存", role: .destructive) {
+                if let id = discardSessionId, store.active?.id == id { store.discardActive() }
+                discardSessionId = nil
+            }
+            Button("取消", role: .cancel) { discardSessionId = nil }
+        } message: { Text("本次训练的记录将被删除且不会保存。此前的训练历史不受影响。") }
+        .onChange(of: store.active?.id) { _, id in
+            if id != discardSessionId { discardSessionId = nil; confirmingDiscard = false }
+            if id == nil { dismiss() }
+        }
         .onAppear { previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled; updateAwake() }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled ?? false }
         .onChange(of: store.workoutPreferences.keepAwake) { _, _ in updateAwake() }
@@ -150,18 +173,16 @@ struct ActiveWorkoutView: View {
         }
         ToolbarItem(placement: .principal) {
             VStack(spacing: 2) {
-                Text(store.active?.name ?? "训练").font(.headline).lineLimit(1)
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("\(workoutClock(context.date.timeIntervalSince(store.active?.startedAt ?? context.date))) · \(store.activeDoneCount)/\(store.activeSetCount) 组")
-                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                }
+                Text(typeSize.isAccessibilitySize ? "训练中" : store.active?.name ?? "训练")
+                    .font(.headline).lineLimit(1).truncationMode(.tail)
+                if !typeSize.isAccessibilitySize { workoutStatus }
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button("训练菜单", systemImage: "ellipsis") { sheet = .menu }.labelStyle(.iconOnly)
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("结束") { sheet = .finish }.buttonStyle(.glassProminent)
+            Button("结束") { sheet = .finish }.buttonStyle(.glassProminent).fixedSize()
         }
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
@@ -169,29 +190,30 @@ struct ActiveWorkoutView: View {
         }
     }
 
-    private func exerciseSelector(_ session: WorkoutSession, proxy: ScrollViewProxy) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            GlassEffectContainer(spacing: 6) {
-                HStack(spacing: 8) {
-                    ForEach(Array(session.exercises.enumerated()), id: \.element.id) { index, exercise in
-                        let isSelected = exercise.id == selected?.id
-                        let done = !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.done)
-                        Button {
-                            store.mutateActive { $0.selectedExerciseId = exercise.id }
-                            if layout != .cards { proxy.scrollTo(exercise.id, anchor: .top) }
-                        } label: {
-                            Group {
-                                if done { Image(systemName: "checkmark") } else { Text("\(index + 1)") }
-                            }.font(.headline).frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.tint(isSelected ? .green : nil).interactive(), in: .circle)
-                        .accessibilityLabel("动作 \(index + 1)，\(exercise.name)\(done ? "，已完成" : "")")
-                        .accessibilityAddTraits(isSelected ? .isSelected : [])
-                    }
-                }.padding(.vertical, 3)
-            }
+    private var workoutStatus: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text("\(workoutClock(context.date.timeIntervalSince(store.active?.startedAt ?? context.date))) · \(store.activeDoneCount)/\(store.activeSetCount) 组")
+                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                .accessibilityLabel("训练用时 \(workoutClock(context.date.timeIntervalSince(store.active?.startedAt ?? context.date)))，已完成 \(store.activeDoneCount) / \(store.activeSetCount) 组")
         }
+    }
+
+    private func exerciseSelector(_ session: WorkoutSession, proxy: ScrollViewProxy) -> some View {
+        WorkoutExerciseSelector(exercises: session.exercises, selection: Binding(get: { selected?.id }, set: { id in
+            store.mutateActive { $0.selectedExerciseId = id }
+            if layout != .cards, let id { proxy.scrollTo(id, anchor: .top) }
+        }))
+    }
+
+    private func requestDiscard() {
+        discardSessionId = store.active?.id
+        sheet = nil
+    }
+
+    private func sheetDidDismiss() {
+        // Present only after the sheet is gone; confirmation must never anchor to its button.
+        if let id = discardSessionId, store.active?.id == id { confirmingDiscard = true }
+        else { discardSessionId = nil }
     }
 
     private func navigation(_ session: WorkoutSession) -> some View {
@@ -221,6 +243,56 @@ struct ActiveWorkoutView: View {
     }
 
     private func updateAwake() { UIApplication.shared.isIdleTimerDisabled = scenePhase == .active && store.workoutPreferences.keepAwake }
+}
+
+private struct WorkoutExerciseSelector: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    var exercises: [WorkoutExercise]
+    @Binding var selection: UUID?
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            if exercises.count <= 5 && !typeSize.isAccessibilitySize {
+                Picker("切换动作", selection: $selection) {
+                    ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
+                        Text("\(index + 1)\(isDone(exercise) ? " ✓" : "")")
+                            .tag(Optional(exercise.id)).accessibilityLabel(label(index, exercise))
+                    }
+                }
+                .pickerStyle(.segmented).controlSize(.large).labelsHidden()
+                .frame(minWidth: CGFloat(exercises.count) * 56, minHeight: 44)
+            }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
+                            Button { selection = exercise.id } label: {
+                                VStack(spacing: 1) {
+                                    Text("\(index + 1)").font(.body.bold()).monospacedDigit()
+                                    if isDone(exercise) { Image(systemName: "checkmark").font(.caption2.bold()) }
+                                }
+                                .frame(minWidth: 44, minHeight: 44)
+                                .padding(.horizontal, 2)
+                                .background(selection == exercise.id ? Color.green.opacity(0.16) : .clear, in: .rect(cornerRadius: 10))
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain).foregroundStyle(selection == exercise.id ? .primary : .secondary)
+                            .accessibilityLabel(label(index, exercise))
+                            .accessibilityAddTraits(selection == exercise.id ? .isSelected : [])
+                            .id(exercise.id)
+                        }
+                    }
+                }
+                .onAppear { if let selection { proxy.scrollTo(selection, anchor: .center) } }
+                .onChange(of: selection) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
+            }
+        }
+    }
+
+    private func isDone(_ exercise: WorkoutExercise) -> Bool { !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.done) }
+    private func label(_ index: Int, _ exercise: WorkoutExercise) -> String {
+        "动作 \(index + 1)，\(exercise.name)\(isDone(exercise) ? "，已完成" : "")"
+    }
 }
 
 struct WorkoutRestBar: View {

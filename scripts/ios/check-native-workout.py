@@ -3,6 +3,7 @@
 Requires tree-sitter==0.26.0, tree-sitter-swift==0.7.4, openstep-parser==2.0.3.
 """
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import re
@@ -13,6 +14,10 @@ from openstep_parser import OpenStepDecoder
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[2]
+arguments = argparse.ArgumentParser(description=__doc__)
+arguments.add_argument("--output", type=Path, default=ROOT / "docs/dev/workout-page-static-checks-2026-10-23.json",
+                       help="Write this run's static evidence without replacing an earlier report.")
+options = arguments.parse_args()
 IOS = ROOT / "frontend/ios"
 NATIVE = IOS / "App/App/Native"
 sources = sorted(NATIVE.glob("Workout*.swift")) + [NATIVE / name for name in ["GymModels.swift", "GymStore.swift", "Catalogue.swift", "RoutineEditorView.swift"]]
@@ -81,7 +86,7 @@ report = {
     "unverified": ["Swift typecheck and XCTest on a Swift host", "Xcode 26+ simulator build", "iPhone native Liquid Glass visuals and all interactions", "background notification delivery and AVPlayer looping", "Dynamic Type, VoiceOver, light/dark and orientation"],
     "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files + [project_path, metadata_path]},
 }
-output = ROOT / "docs/dev/workout-page-static-checks-2026-10-23.json"
+output = options.output
 output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf8")
 print(json.dumps({k: v for k, v in report.items() if k != "sha256"}, ensure_ascii=False, indent=2))
 sys.exit(0 if all(checks.values()) else 1)

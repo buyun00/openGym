@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WaterView: View {
     @Environment(GymStore.self) private var store
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showAdd = false
     @State private var showSettings = false
     @State private var showHistory = false
@@ -18,6 +17,10 @@ struct WaterView: View {
     }
     private var amount: Int { selectedAmount ?? wellness.state.settings.cupML }
     private var amounts: [Int] { Array(Set([150, 250, 350, 500, wellness.state.settings.cupML])).sorted() }
+    private var lastRecordedEntry: WaterEntry? {
+        guard let id = wellness.lastAddedWaterID else { return nil }
+        return entries.first { $0.id == id }
+    }
     private var scheduledDoses: [DoseInstance] {
         Supplement.allCases.flatMap { wellness.state.instances(for: $0, on: wellness.now) }
             .filter { $0.time != nil }
@@ -33,30 +36,36 @@ struct WaterView: View {
             ZStack {
                 WaterBackground(progress: wellness.waterFill, active: waterActive)
                 GeometryReader { geometry in
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            progressHeader
-                            Spacer(minLength: 24)
-                            if !scheduledDoses.isEmpty { supplementReminder }
-                            Spacer(minLength: 16)
-                            if dynamicTypeSize.isAccessibilitySize { quickRecorder }
+                    Group {
+                        if geometry.size.width > geometry.size.height * 1.35 {
+                            // Short, wide safe areas use both columns instead of
+                            // putting the controls below an oversized header.
+                            HStack(spacing: 20) {
+                                VStack(spacing: 8) {
+                                    progressHeader(compact: true)
+                                    if !scheduledDoses.isEmpty { supplementReminder(compact: true) }
+                                }
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity)
+                                quickRecorder(compact: true)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        } else {
+                            // Test complete intrinsic content heights. A shorter
+                            // viewport changes layout, never crops content or
+                            // disables the horizontal selectors and sheet lists.
+                            ViewThatFits(in: .vertical) {
+                                dashboard(compact: false)
+                                dashboard(compact: true)
+                            }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
-                        .frame(maxWidth: 560)
-                        .frame(minHeight: geometry.size.height)
-                        .frame(maxWidth: .infinity)
                     }
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !dynamicTypeSize.isAccessibilitySize {
-                    quickRecorder
-                        .frame(maxWidth: 560)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        .padding(.bottom, 24)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: geometry.size.width > geometry.size.height * 1.35 ? 1000 : 560,
+                           maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .navigationTitle("喝水")
@@ -79,12 +88,26 @@ struct WaterView: View {
         }
     }
 
-    private var progressHeader: some View {
-        VStack(spacing: 8) {
-            Text("今日饮水").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+    private func dashboard(compact: Bool) -> some View {
+        VStack(spacing: compact ? 6 : 12) {
+            progressHeader(compact: compact).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: compact ? 0 : 12)
+            if !scheduledDoses.isEmpty {
+                supplementReminder(compact: compact).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: compact ? 0 : 12)
+            quickRecorder(compact: compact).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func progressHeader(compact: Bool) -> some View {
+        VStack(spacing: compact ? 4 : 8) {
+            if !compact {
+                Text("今日饮水").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(wellness.todayWater, format: .number.grouping(.never))
-                    .font(.system(size: min(amountSize, 120), weight: .bold, design: .rounded))
+                    .font(.system(size: min(amountSize, compact ? 44 : 120), weight: .bold, design: .rounded))
                     .monospacedDigit().contentTransition(.numericText())
                     .lineLimit(1).minimumScaleFactor(0.4)
                 Text("mL").font(.title2.weight(.semibold))
@@ -93,7 +116,7 @@ struct WaterView: View {
             .accessibilityLabel("今日已记录饮品 \(wellness.todayWater) 毫升")
             if let goal = wellness.state.settings.waterGoalML {
                 Text("目标 \(goal) mL · 已完成 \(Int(wellness.progress * 100))%")
-                    .font(.subheadline.weight(.medium))
+                    .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
                 Text(wellness.todayWater >= goal ? "今日目标已完成" : "距离目标还有 \(goal - wellness.todayWater) mL")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
@@ -107,7 +130,7 @@ struct WaterView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var supplementReminder: some View {
+    private func supplementReminder(compact: Bool) -> some View {
         let next = pendingDoses.first ?? scheduledDoses.first
         return Group {
             if let next {
@@ -125,7 +148,7 @@ struct WaterView: View {
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                     }
-                    .frame(minHeight: 44).padding(14)
+                    .frame(minHeight: 44).padding(compact ? 0 : 14)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain).foregroundStyle(.primary)
@@ -134,80 +157,159 @@ struct WaterView: View {
         }
     }
 
-    private var quickRecorder: some View {
-        VStack(spacing: 18) {
+    private func quickRecorder(compact: Bool) -> some View {
+        VStack(spacing: compact ? 8 : 18) {
             ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: compact ? 8 : 12) {
                     ForEach(DrinkKind.allCases) { kind in
                         Button { drink = kind } label: {
-                            VStack(spacing: 7) {
-                                Image(systemName: kind.symbol)
-                                    .font(.system(size: 28, weight: .medium))
-                                    .frame(width: 56, height: 56)
+                            if compact {
+                                Label(kind.name, systemImage: kind.symbol)
+                                    .font(.subheadline.weight(drink == kind ? .semibold : .regular))
+                                    .fixedSize(horizontal: true, vertical: true)
+                                    .padding(.horizontal, 12).frame(minHeight: 44)
                                     .foregroundStyle(drink == kind ? Color.accentColor : Color.primary)
-                                    .background(drink == kind ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.07), in: .circle)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        if drink == kind {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption).foregroundStyle(Color.accentColor)
-                                                .background(.background, in: .circle)
+                                    .background(drink == kind ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.07), in: .capsule)
+                            } else {
+                                VStack(spacing: 7) {
+                                    Image(systemName: kind.symbol)
+                                        .font(.system(size: 28, weight: .medium))
+                                        .frame(width: 56, height: 56)
+                                        .foregroundStyle(drink == kind ? Color.accentColor : Color.primary)
+                                        .background(drink == kind ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.07), in: .circle)
+                                        .overlay(alignment: .bottomTrailing) {
+                                            if drink == kind {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(.caption).foregroundStyle(Color.accentColor)
+                                                    .background(.background, in: .circle)
+                                            }
                                         }
-                                    }
-                                Text(kind.name).font(.caption.weight(drink == kind ? .semibold : .regular))
+                                    Text(kind.name).font(.caption.weight(drink == kind ? .semibold : .regular))
+                                }
+                                .frame(minWidth: 58).padding(.vertical, 3)
                             }
-                            .frame(minWidth: 58).padding(.vertical, 3)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(kind.name)
                         .accessibilityAddTraits(drink == kind ? [.isSelected] : [])
                     }
                 }.padding(.horizontal, 2)
-            }.scrollIndicators(.hidden)
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(amounts, id: \.self) { value in
-                        Button { selectedAmount = value } label: {
-                            Text("\(value) mL").font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 14).frame(minHeight: 44)
-                                .foregroundStyle(amount == value ? Color.white : Color.primary)
-                                .background(amount == value ? Color.accentColor : Color.secondary.opacity(0.08), in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(value) 毫升")
-                        .accessibilityAddTraits(amount == value ? [.isSelected] : [])
-                    }
-                }.padding(.horizontal, 2)
-            }.scrollIndicators(.hidden)
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 10) { recordActions }
-            } else {
-                HStack(spacing: 10) { recordActions }
             }
-            if let id = wellness.lastAddedWaterID,
-               let entry = entries.first(where: { $0.id == id }) {
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .fixedSize(horizontal: false, vertical: true)
+            if compact {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        amountMenu
+                        recordButton(compact: true)
+                        customButton(compact: true)
+                        if lastRecordedEntry != nil { undoButton(compact: true) }
+                    }
+                    VStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            amountMenu
+                            customButton(compact: true)
+                            if lastRecordedEntry != nil { undoButton(compact: true) }
+                        }
+                        recordButton(compact: true)
+                    }
+                }
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(amounts, id: \.self) { value in
+                            Button { selectedAmount = value } label: {
+                                Text("\(value) mL").font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 14).frame(minHeight: 44)
+                                    .foregroundStyle(amount == value ? Color.white : Color.primary)
+                                    .background(amount == value ? Color.accentColor : Color.secondary.opacity(0.08), in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(value) 毫升")
+                            .accessibilityAddTraits(amount == value ? [.isSelected] : [])
+                        }
+                    }.padding(.horizontal, 2)
+                }
+                .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                .fixedSize(horizontal: false, vertical: true)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        recordButton(compact: false)
+                        customButton(compact: false)
+                    }
+                    VStack(spacing: 6) {
+                        recordButton(compact: false)
+                        customButton(compact: false)
+                    }
+                }
+            }
+            if let entry = lastRecordedEntry {
                 HStack {
                     Text("\(entry.drink.name) · \(entry.milliliters) mL 已记录").font(.caption)
-                    Spacer(minLength: 8)
-                    Button("撤销") { wellness.removeWater(id) }.font(.subheadline).frame(minHeight: 44)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !compact {
+                        Spacer(minLength: 8)
+                        undoButton(compact: false)
+                    }
                 }
                 .accessibilityElement(children: .contain)
             }
         }
     }
 
-    @ViewBuilder private var recordActions: some View {
+    private var amountMenu: some View {
+        Menu {
+            Picker("容量", selection: Binding(get: { amount }, set: { selectedAmount = $0 })) {
+                ForEach(amounts, id: \.self) { value in Text("\(value) mL").tag(value) }
+            }
+        } label: {
+            Label("\(amount) mL", systemImage: "chevron.down")
+                .font(.subheadline.weight(.semibold)).fixedSize()
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.glass)
+        .accessibilityLabel("选择容量，当前 \(amount) 毫升")
+    }
+
+    private func recordButton(compact: Bool) -> some View {
         Button {
             if wellness.addWater(amount, drink: drink) { savedCount += 1 }
         } label: {
-            Label("记录 \(drink.name) · \(amount) mL", systemImage: "plus")
-                .font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+            Label(compact ? "记录" : "记录 \(drink.name) · \(amount) mL", systemImage: "plus")
+                .font(.headline).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.glassProminent)
+        .accessibilityLabel("记录 \(drink.name) \(amount) 毫升")
+    }
+
+    private func customButton(compact: Bool) -> some View {
         Button { showAdd = true } label: {
-            Text("自定义").font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 4)
+            Group {
+                if compact { Image(systemName: "slider.horizontal.3").frame(minWidth: 24) }
+                else { Text("自定义").fixedSize() }
+            }
+            .font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 4)
         }
         .buttonStyle(.glass)
+        .accessibilityLabel("自定义记录")
         .accessibilityHint("修改容量或补记之前喝的饮品")
+    }
+
+    @ViewBuilder private func undoButton(compact: Bool) -> some View {
+        if let entry = lastRecordedEntry {
+            Button { wellness.removeWater(entry.id) } label: {
+                Group {
+                    if compact { Image(systemName: "arrow.uturn.backward").frame(minWidth: 24) }
+                    else { Text("撤销").fixedSize() }
+                }
+                .font(.subheadline).frame(minHeight: 44)
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("撤销刚才记录的 \(entry.drink.name) \(entry.milliliters) 毫升")
+        }
     }
 }
 

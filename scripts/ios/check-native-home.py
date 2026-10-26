@@ -19,6 +19,7 @@ NATIVE = IOS / "App/App/Native"
 parser = tree_sitter.Parser(tree_sitter.Language(tree_sitter_swift.language()))
 arguments = argparse.ArgumentParser(description=__doc__)
 arguments.add_argument("--swift-file", action="append", help="Limit Swift syntax parsing to these repository-relative files; project/source-wiring checks still run")
+arguments.add_argument("--report", default="docs/dev/water-home-static-checks-2026-10-23.json", help="Repository-relative output report; use a new path to preserve historical evidence")
 options = arguments.parse_args()
 errors = []
 files = sorted(NATIVE.glob("*.swift")) + sorted((IOS / "Tests").rglob("*.swift")) + [IOS / "Package.swift", IOS / "App/App/SceneDelegate.swift"]
@@ -50,7 +51,7 @@ root = (NATIVE / "RootView.swift").read_text("utf8")
 scene = (IOS / "App/App/SceneDelegate.swift").read_text("utf8")
 motion = (NATIVE / "WaterMotion.swift").read_text("utf8")
 background = (NATIVE / "WaterBackground.swift").read_text("utf8")
-tab_order = re.findall(r'Tab\("[^"]+", systemImage: "[^"]+", value: AppTab\.(\w+)\)', root)
+tab_order = re.findall(r'\.init\(tab: \.(\w+), title:', root)
 checks = {
     "swift_syntax": not errors,
     "project_object_identifiers": all(len(key) == 24 for key in objects),
@@ -58,9 +59,16 @@ checks = {
     "metal_in_sources": "WaterScene.metal" in sources,
     "license_in_resources": "WaterThirdPartyNotices.txt" in resources,
     "motion_usage_description": bool(plist.get("NSMotionUsageDescription")),
-    "four_navigation_tabs": "TabView(selection:" in root and tab_order == ["today", "plan", "body", "water"],
-    "independent_start_button": 'Button { select(.workout) }' in root and 'accessibilityIdentifier("start-workout-action")' in root and 'value: AppTab.workout' not in root,
-    "separate_native_glass_shapes": 'GlassEffectContainer(spacing: 6)' in root and 'HStack(spacing: 12)' in root and 'in: .circle' in root and 'in: .capsule' in root,
+    "four_navigation_tabs": tab_order == ["today", "plan", "body", "water"],
+    "native_tab_control": all(token in root for token in ["-> UITabBar", "UITabBar(frame:", "UITabBarItem(", "UITabBarDelegate", "didSelect item:", "bar.selectedItem"]),
+    "native_tab_interaction_unmodified": all(token not in root for token in ["HomeDock", "selectionIndicatorImage", "UITapGestureRecognizer", "UIPanGestureRecognizer", "DragGesture", ".toolbar(.hidden, for: .tabBar)", "Capsule().fill", "bar.standardAppearance", "bar.backgroundImage"]),
+    "independent_start_button": 'workoutRequest += 1' in root and 'store.tab = .workout' in root and 'WorkoutView().id(workoutRequest)' in root and 'accessibilityIdentifier("start-workout-action")' in root and "workout" not in tab_order,
+    "restrained_glass_action": '.buttonBorderShape(.circle)' in root and '.buttonStyle(.glass)' in root and '.tint(.green)' not in root,
+    "home_safe_area_reservation": '.safeAreaInset(edge: .bottom, spacing: 0)' in root,
+    "home_single_screen_source": 'ScrollView' not in today and 'ViewThatFits(in: .vertical)' in today and '.navigationBarTitleDisplayMode(.inline)' in today,
+    "home_no_goal_or_receipt": all(token not in today for token in ['waterGoalML', '未设目标', '设置每日饮水目标', 'lastAddedWaterID', 'Text("已记录']),
+    "home_confirmation_only_water_write": today.count('wellness.addWater(') == 1 and 'private func confirmWater()' in today and 'Button(action: confirmWater)' in today and 'selection: $pendingWaterML' in today and '.pickerStyle(.wheel)' in today,
+    "home_sync_symbol_and_details": 'NavigationLink { GymConnectionView() }' in today and 'Image(systemName: syncSymbol)' in today and '.accessibilityValue(store.cloud.status)' in today and all(token in today for token in ['store.cloud.busy', 'store.cloud.errorMessage', 'store.cloud.lastSync']) and 'Label(store.cloud.status' not in today,
     "custom_center_button_removed": "NativeTabBarAnchor" not in root and "NativeTabBarAnchor.swift" not in sources and not (NATIVE / "NativeTabBarAnchor.swift").exists(),
     "scene_lifecycle_source_wiring": all(token in scene for token in [r'.environment(\.scenePhase, lifecycle.phase)', "sceneDidBecomeActive", "sceneWillResignActive", "sceneDidEnterBackground"]),
     "published_water_frame_source_wiring": "@Published private(set) var frame" in motion and "@StateObject private var motion" in background and background.index("let frame = motion.frame") < background.index("GeometryReader" + " {"),
@@ -70,15 +78,15 @@ checks = {
     "no_webview_home": all(token not in today for token in ["WKWebView", "UIViewRepresentable", "HTML"]),
     "separate_persistence": 'wellness-state.json' in (NATIVE / 'WellnessStore.swift').read_text('utf8')
 }
-evidence_files = list(dict.fromkeys(files + [NATIVE / "TodayView.swift", NATIVE / "WellnessStore.swift", IOS / "App/App/SceneDelegate.swift", NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]))
+evidence_files = list(dict.fromkeys(files + [NATIVE / "RootView.swift", NATIVE / "TodayView.swift", NATIVE / "WellnessStore.swift", IOS / "App/App/SceneDelegate.swift", NATIVE / "WaterScene.metal", NATIVE / "WaterThirdPartyNotices.txt", IOS / "App/App.xcodeproj/project.pbxproj", IOS / "App/App/Info.plist"]))
 report = {
-    "scope": "Windows static syntax and project structure only; NOT Swift typecheck, Metal compilation, Swift test execution or iOS runtime",
+    "scope": "Windows static syntax and project/source wiring only; NOT Swift typecheck, Metal compilation, Swift tests, iOS layout, native gestures or device runtime",
     "swift_files_parsed": len(files), "checks": checks, "syntax_errors": errors, "missing_build_sources": missing,
     "syntax_scope": [file.relative_to(ROOT).as_posix() for file in files],
     "existing_generated_prerequisites_missing": [p for p in ["App/App/public", "App/App/config.xml", "App/App/capacitor.config.json", "App/Pods"] if not (IOS / p).exists()],
     "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence_files}
 }
-out = ROOT / "docs/dev/water-home-static-checks-2026-10-23.json"
+out = ROOT / options.report
 out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf8")
 print(json.dumps({key: value for key, value in report.items() if key != "sha256"}, ensure_ascii=False, indent=2))
 sys.exit(0 if all(checks.values()) else 1)

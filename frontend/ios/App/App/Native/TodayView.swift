@@ -2,175 +2,221 @@ import SwiftUI
 
 struct TodayView: View {
     @Environment(GymStore.self) private var store
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showSettings = false
-    @State private var showWaterEntry = false
     @State private var selectedSupplement: Supplement?
-    @ScaledMetric(relativeTo: .largeTitle) private var amountSize = 86.0
+    @State private var pendingWaterML = 250
+    @State private var initializedWaterAmount = false
+    @State private var waterConfirmation = 0
+    @ScaledMetric(relativeTo: .largeTitle) private var amountSize = 74.0
 
     private var wellness: WellnessStore { store.wellness }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && !showWaterEntry && selectedSupplement == nil)
-                ScrollView {
-                    VStack(spacing: 20) {
-                        NavigationLink { GymConnectionView() } label: {
-                            Label(store.cloud.status, systemImage: store.cloud.errorMessage == nil ? "icloud" : "icloud.slash")
-                                .font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                        }.buttonStyle(.plain)
-                        workoutSummary
-                        hydration
-                        supplements
+                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && selectedSupplement == nil)
+                GeometryReader { geometry in
+                    Group {
+                        if geometry.size.width > geometry.size.height * 1.5 {
+                            HStack(alignment: .top, spacing: 16) {
+                                VStack(spacing: 10) {
+                                    workoutSummary(compact: true)
+                                    supplements(compact: true)
+                                }.frame(maxWidth: .infinity)
+                                hydration(compact: true).frame(maxWidth: .infinity)
+                            }
+                        } else {
+                            // Measure both complete layouts. Neither candidate crops
+                            // cards or removes content to fit a shorter safe area.
+                            ViewThatFits(in: .vertical) {
+                                dashboard(compact: false).fixedSize(horizontal: false, vertical: true)
+                                dashboard(compact: true).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
-                    .frame(maxWidth: 600)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-                    .padding(.bottom, 28)
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: geometry.size.width > geometry.size.height * 1.5 ? 1000 : 600,
+                           maxHeight: .infinity, alignment: .top)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             }
             .navigationTitle("今天")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 4) {
+                        Text("今天").font(.headline)
+                        NavigationLink { GymConnectionView() } label: {
+                            Image(systemName: syncSymbol)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(store.cloud.errorMessage == nil ? Color.secondary : Color.orange)
+                                .symbolEffect(.pulse, isActive: store.cloud.busy)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("同步状态")
+                        .accessibilityValue(store.cloud.status)
+                        .accessibilityHint("查看连接详情和同步状态")
+                        .accessibilityIdentifier("home-sync-status")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("设置", systemImage: "gearshape") { showSettings = true }
                 }
             }
             .sheet(isPresented: $showSettings) { WellnessSettingsSheet() }
-            .sheet(isPresented: $showWaterEntry) { WaterEntrySheet() }
             .sheet(item: $selectedSupplement) { supplement in DoseSheet(supplement: supplement) }
+            .sensoryFeedback(.success, trigger: waterConfirmation)
+            .onAppear {
+                wellness.refreshTime()
+                if !initializedWaterAmount {
+                    pendingWaterML = wellness.state.settings.cupML
+                    initializedWaterAmount = true
+                }
+            }
+            .onChange(of: wellness.state.settings.cupML) { _, amount in pendingWaterML = amount }
         }
     }
 
-    private var workoutSummary: some View {
-        HStack(spacing: 16) {
+    private var syncSymbol: String {
+        if store.cloud.busy { return "arrow.triangle.2.circlepath" }
+        if store.cloud.errorMessage != nil { return "exclamationmark.icloud" }
+        if store.cloud.lastSync != nil && store.cloud.status == "已与网页同步" { return "checkmark.icloud" }
+        return store.cloud.connected ? "icloud.and.arrow.up" : "icloud.slash"
+    }
+
+    private func dashboard(compact: Bool) -> some View {
+        VStack(spacing: compact ? 10 : 16) {
+            workoutSummary(compact: compact)
+            hydration(compact: compact)
+            supplements(compact: compact)
+        }
+    }
+
+    private func workoutSummary(compact: Bool) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: "dumbbell.fill")
-                .font(.title2).foregroundStyle(.secondary).padding(14)
+                .font(compact ? .title3 : .title2).foregroundStyle(.secondary).padding(compact ? 10 : 12)
                 .background(.quaternary, in: .circle).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("今日训练").font(.subheadline).foregroundStyle(.secondary)
-                Text(store.todayTitle).font(.title2.bold())
-                if let detail = trainingDetail { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("今日训练").font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
+                Text(store.todayTitle).font(compact ? .headline : .title3.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = trainingDetail {
+                    Text(detail).font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
+        .padding(compact ? 12 : 16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
     }
 
     private var trainingDetail: String? {
-        if store.active != nil { return "已完成 \(store.activeDoneCount)/\(store.activeSetCount) 组 · 在“开始”继续" }
+        if store.active != nil { return "已完成 \(store.activeDoneCount)/\(store.activeSetCount) 组 · 可继续训练" }
         if store.didTrainToday { return "今天的训练已记录" }
         return store.todayDetail
     }
 
-    private var hydration: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("今日饮水").font(.headline)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(wellness.todayWater, format: .number.grouping(.never))
-                    .font(.system(size: min(amountSize, 130), weight: .bold, design: .rounded))
-                    .monospacedDigit().minimumScaleFactor(0.4).lineLimit(1)
-                    .contentTransition(.numericText())
-                Text("mL").font(.title2.bold())
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("今日已饮水 \(wellness.todayWater) 毫升")
-            if let goal = wellness.state.settings.waterGoalML {
-                Text("目标 \(goal) mL · 已完成 \(Int(wellness.progress * 100))%")
-                    .font(.subheadline.weight(.medium))
-                if wellness.progress > 1 {
-                    Text("已超过目标 \(wellness.todayWater - goal) mL").font(.caption)
+    private func hydration(compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("今日饮水").font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(wellness.todayWater, format: .number.grouping(.never))
+                        .font(.system(size: min(amountSize, compact ? 62 : 80), weight: .bold, design: .rounded))
+                        .monospacedDigit().minimumScaleFactor(0.3).lineLimit(1)
+                        .contentTransition(.numericText())
+                    Text("mL").font(.headline).fixedSize()
                 }
-            } else {
-                Text("未设目标 · 水位满刻度 \(wellness.state.waterScaleML) mL")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                Button("设置每日饮水目标", systemImage: "slider.horizontal.3") { showSettings = true }
-                    .buttonStyle(.glass)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("今日已饮水 \(wellness.todayWater) 毫升")
             }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) { waterButtons }
-                VStack(spacing: 12) { waterButtons }
-            }.padding(.top, 10)
-            if let id = wellness.lastAddedWaterID,
-               let entry = wellness.state.water.first(where: { $0.id == id }),
-               entry.day == WellnessDay.key(wellness.now) {
-                HStack {
-                    Text("已记录 \(entry.milliliters) mL").font(.caption)
-                    Spacer()
-                    Button("撤销") { wellness.removeWater(id) }.font(.subheadline).frame(minHeight: 44)
-                }.accessibilityElement(children: .contain)
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 8).foregroundStyle(.primary)
-    }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-    @ViewBuilder private var waterButtons: some View {
-        Button { _ = wellness.addWater(wellness.state.settings.cupML) } label: {
-            Text("+\(wellness.state.settings.cupML) mL").font(.title3.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44).padding(.horizontal, 10)
-        }
-        .buttonStyle(.glass)
-        .accessibilityLabel("记录饮水 \(wellness.state.settings.cupML) 毫升")
-        Button { showWaterEntry = true } label: {
-            Text("自定义").font(.title3.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44).padding(.horizontal, 10)
-        }.buttonStyle(.glass)
-    }
-
-    private var supplements: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("今日服用").font(.headline).foregroundStyle(.secondary)
-            supplementRow(.b)
-            Divider()
-            supplementRow(.d)
-        }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
-    }
-
-    private func supplementRow(_ supplement: Supplement) -> some View {
-        let instances = wellness.state.instances(for: supplement, on: wellness.now)
-        let done = instances.filter { wellness.state.record(for: $0) != nil }.count
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 12) {
-                    supplementLabel(supplement, instances: instances, done: done)
-                    supplementAction(supplement, hasInstances: !instances.isEmpty, complete: done == instances.count)
-                }
-            } else {
-                HStack(spacing: 10) {
-                    supplementLabel(supplement, instances: instances, done: done)
-                    Spacer(minLength: 0)
-                    supplementAction(supplement, hasInstances: !instances.isEmpty, complete: done == instances.count)
-                }
-            }
-        }
-    }
-
-    private func supplementLabel(_ supplement: Supplement, instances: [DoseInstance], done: Int) -> some View {
-            HStack(spacing: 12) {
-                Image(systemName: "pills.fill").font(.title2)
-                    .foregroundStyle(supplement == .b ? Color.orange : Color.mint)
-                    .frame(width: 44, height: 44).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(supplement.name).font(.title3.bold())
-                    Text(supplementCaption(supplement, instances: instances, done: done))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    if supplement == .b {
-                        HStack(spacing: 8) {
-                            ForEach(instances) { instance in
-                                Image(systemName: wellness.state.record(for: instance) == nil ? "circle" : "checkmark.circle.fill")
-                                    .foregroundStyle(wellness.state.record(for: instance) == nil ? Color.secondary : Color.accentColor)
-                            }
-                        }.accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text("本次新增").font(.caption).foregroundStyle(.secondary)
+                Picker("本次新增水量", selection: $pendingWaterML) {
+                    ForEach(waterAmounts, id: \.self) { amount in
+                        Text("\(amount) mL").font(.body.monospacedDigit()).tag(amount)
                     }
                 }
+                .pickerStyle(.wheel)
+                .labelsHidden()
+                .frame(width: compact ? 112 : 132, height: compact ? 92 : 112)
+                .clipped() // Only the wheel's scrolling viewport, never a dashboard card.
+                .contentShape(Rectangle())
+                .accessibilityHint("上下滑动选择，点确定后才保存")
+                .accessibilityIdentifier("home-water-amount")
+                Button(action: confirmWater) {
+                    Text("确定").font(.body.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.regular)
+                .accessibilityLabel("确认添加 \(pendingWaterML) 毫升饮水")
+                .accessibilityIdentifier("home-water-confirm")
             }
+            .frame(width: compact ? 112 : 132)
+        }
+        .padding(.horizontal, 8).padding(.vertical, compact ? 0 : 6)
+        .foregroundStyle(.primary)
+    }
+
+    private var waterAmounts: [Int] {
+        Array(Set(Array(stride(from: 50, through: 2000, by: 50)) + [wellness.state.settings.cupML])).sorted()
+    }
+
+    private func confirmWater() {
+        withAnimation(.snappy) {
+            if wellness.addWater(pendingWaterML) { waterConfirmation += 1 }
+        }
+    }
+
+    private func supplements(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+            Text("今日服用").font(.headline).foregroundStyle(.secondary)
+            supplementRow(.b, compact: compact)
+            Divider()
+            supplementRow(.d, compact: compact)
+        }
+        .padding(compact ? 12 : 16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+    }
+
+    private func supplementRow(_ supplement: Supplement, compact: Bool) -> some View {
+        let instances = wellness.state.instances(for: supplement, on: wellness.now)
+        let done = instances.filter { wellness.state.record(for: $0) != nil }.count
+        return HStack(spacing: 8) {
+            supplementLabel(supplement, instances: instances, done: done, compact: compact)
+            Spacer(minLength: 0)
+            supplementAction(supplement, hasInstances: !instances.isEmpty, complete: done == instances.count)
+        }
+    }
+
+    private func supplementLabel(_ supplement: Supplement, instances: [DoseInstance], done: Int, compact: Bool) -> some View {
+        HStack(spacing: compact ? 8 : 12) {
+            Image(systemName: "pills.fill").font(compact ? .title3 : .title2)
+                .foregroundStyle(supplement == .b ? Color.orange : Color.mint)
+                .frame(width: compact ? 28 : 36).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(supplement.name).font(.headline)
+                Text(supplementCaption(supplement, instances: instances, done: done))
+                    .font(compact ? .caption : .subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if supplement == .b {
+                    HStack(spacing: 6) {
+                        ForEach(instances) { instance in
+                            Image(systemName: wellness.state.record(for: instance) == nil ? "circle" : "checkmark.circle.fill")
+                                .foregroundStyle(wellness.state.record(for: instance) == nil ? Color.secondary : Color.accentColor)
+                        }
+                    }.font(.caption).accessibilityHidden(true)
+                }
+            }
+        }
     }
 
     @ViewBuilder private func supplementAction(_ supplement: Supplement, hasInstances: Bool, complete: Bool) -> some View {

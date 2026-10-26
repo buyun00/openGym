@@ -1,11 +1,318 @@
 import Charts
 import SwiftUI
 
+private enum BodySection: String, CaseIterable, Identifiable, Hashable {
+    case weight = "体重", muscle = "肌肉", intensity = "强度", records = "记录"
+    var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .weight: "scalemass"
+        case .muscle: "figure.strengthtraining.traditional"
+        case .intensity: "gauge.with.dots.needle.50percent"
+        case .records: "calendar"
+        }
+    }
+}
+
 struct BodyView: View {
     @Environment(GymStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var weightRange: BodyRange = .month
     @State private var trainingRange: BodyRange = .month
+    @State private var visibleSection: BodySection? = .weight
+    @State private var detail: BodySection?
+    @State private var selectedWeightDate: Date?
+    @State private var selectedRecordDate: Date?
+    @State private var visibleMonth = Date.now
+    @State private var entry: BodyEntryRequest?
+
+    private var sessions: [WorkoutSession] { BodyAnalytics.workouts(store.workouts, range: trainingRange, now: .now) }
+    private var weights: [WeighIn] { BodyAnalytics.weights(store.weighIns, range: weightRange, now: .now) }
+    private var allWeights: [WeighIn] { BodyAnalytics.weights(store.weighIns, range: .all, now: .now) }
+    private var allWorkouts: [WorkoutSession] { BodyAnalytics.workouts(store.workouts, range: .all, now: .now) }
+    private var pageSelection: Binding<BodySection> {
+        Binding(get: { visibleSection ?? .weight }, set: { section in
+            withAnimation(reduceMotion ? nil : .snappy) { visibleSection = section }
+        })
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(BodySection.allCases, id: \.self) { section in
+                        GeometryReader { viewport in
+                            GroupBox {
+                                ViewThatFits(in: .vertical) {
+                                    if !typeSize.isAccessibilitySize {
+                                        pageContent(section, compact: false, height: viewport.size.height)
+                                    }
+                                    pageContent(section, compact: true, height: viewport.size.height)
+                                    minimalContent(section)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                        }
+                        // The nearest container is this ScrollView. Its native safe-area
+                        // height already excludes the navigation bar and RootView's tab inset.
+                        // Padding is INSIDE the page so all four targets stay one viewport apart.
+                        .containerRelativeFrame(.vertical)
+                        .id(section)
+                        .accessibilityIdentifier("body-page-\(section.id)")
+                    }
+                }.scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $visibleSection, anchor: .top)
+            .scrollIndicators(.hidden)
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("身体")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { pageNavigation }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("记录", systemImage: "plus") {
+                        Button("体重与体脂", systemImage: "scalemass") { entry = .weight() }
+                        Button("身体围度", systemImage: "ruler") { entry = .measurement() }
+                    }
+                }
+            }
+            .sheet(item: $entry) { BodyEntrySheet(request: $0) }
+            .sheet(item: $detail) { section in
+                BodyDetailSheet(section: section, weightRange: $weightRange, trainingRange: $trainingRange,
+                                recordDate: selectedRecordDate, recordMonth: visibleMonth)
+            }
+            .alert("记录未保存", isPresented: Binding(
+                get: { store.saveError != nil && entry == nil && detail == nil },
+                set: { if !$0 { store.saveError = nil } }
+            )) {
+                Button("好") { store.saveError = nil }
+            } message: { Text(store.saveError ?? "") }
+            .tint(.green)
+        }
+    }
+
+    private var pageNavigation: some View {
+        HStack(spacing: 8) {
+            Text("身体").font(.headline).fixedSize()
+            ViewThatFits(in: .horizontal) {
+                if !typeSize.isAccessibilitySize {
+                    Picker("身体页面", selection: pageSelection) {
+                        ForEach(BodySection.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+                // Keep all four destinations available when a segmented picker cannot fit.
+                Menu {
+                    Picker("身体页面", selection: pageSelection) {
+                        ForEach(BodySection.allCases) { Label($0.rawValue, systemImage: $0.symbol).tag($0) }
+                    }
+                } label: {
+                    Label((visibleSection ?? .weight).rawValue, systemImage: "chevron.up.chevron.down")
+                }
+            }
+            .accessibilityHint("选择后翻到对应整页；上下滑动也会更新所选页面")
+        }
+    }
+
+    @ViewBuilder private func pageContent(_ section: BodySection, compact: Bool, height: CGFloat) -> some View {
+        switch section {
+        case .weight: weightPage(compact: compact, height: height)
+        case .muscle: musclePage(compact: compact, height: height)
+        case .intensity: intensityPage(compact: compact, height: height)
+        case .records: recordsPage(compact: compact, height: height)
+        }
+    }
+
+    private func heading(_ section: BodySection, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(section.rawValue, systemImage: section.symbol).font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func rangePicker(_ title: String, selection: Binding<BodyRange>, compact: Bool) -> some View {
+        Group {
+            if compact {
+                Picker(title, selection: selection) {
+                    ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.menu)
+            } else {
+                Picker(title, selection: selection) {
+                    ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.segmented)
+            }
+        }
+    }
+
+    private func detailsButton(_ section: BodySection, title: String) -> some View {
+        Button {
+            if section == .records { selectedRecordDate = nil }
+            detail = section
+        } label: {
+            Label(title, systemImage: "arrow.up.right.square")
+                .frame(maxWidth: .infinity)
+                .fixedSize(horizontal: false, vertical: true)
+        }.buttonStyle(.glass)
+    }
+
+    private func weightPage(compact: Bool, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+            heading(.weight, subtitle: "最新记录与体重变化")
+            if let latest = allWeights.last {
+                Text("\(formatKg(latest.kilograms)) kg")
+                    .font(compact ? .title2.bold() : .largeTitle.bold()).monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(latest.date, format: .dateTime.year().month().day())
+                    .font(.caption).foregroundStyle(.secondary)
+                if !compact, weights.count > 1, let first = weights.first, let last = weights.last {
+                    Text("\(weightRange.title)变化  \(signedKg(last.kilograms - first.kilograms)) kg")
+                        .font(.subheadline).monospacedDigit()
+                }
+            } else {
+                Text("还没有体重记录").font(.title3)
+            }
+            rangePicker("体重范围", selection: $weightRange, compact: compact)
+            if !weights.isEmpty {
+                BodyWeightChart(points: weights, target: store.targetKg, selectedDate: $selectedWeightDate,
+                                height: compact ? 140 : min(240, max(170, height * 0.30)))
+            } else {
+                Text("所选时间内暂无称重记录。").foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack { weightActions }
+                VStack(spacing: 8) { weightActions }
+            }
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var weightActions: some View {
+        Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.glassProminent)
+        detailsButton(.weight, title: "体重与围度详情")
+    }
+
+    private func musclePage(compact: Bool, height: CGFloat) -> some View {
+        let loads = BodyAnalytics.muscleLoads(sessions, muscles: Catalogue.musclesById)
+        return VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+            heading(.muscle, subtitle: "已完成训练的肌群分布")
+            rangePicker("肌肉与强度范围", selection: $trainingRange, compact: compact)
+            BodyMuscleMap(loads: loads, maximumFigureHeight: compact ? 150 : min(340, max(200, height * 0.43)),
+                          showsLegend: !compact)
+            if !compact, let strongest = loads.first {
+                LabeledContent("本期最多 · \(Catalogue.muscleName(strongest.id))", value: "\(formatKg(strongest.value))组")
+            }
+            Text(loads.isEmpty ? "本期暂无肌群训练记录" : "已覆盖 \(loads.count) 个肌群 · 参与权重折算组数")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            detailsButton(.muscle, title: "肌群组数与未覆盖部位")
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func intensityPage(compact: Bool, height: CGFloat) -> some View {
+        let result = BodyAnalytics.intensity(sessions)
+        return VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+            heading(.intensity, subtitle: "训练强度 · 剩余可完成次数 RIR")
+            rangePicker("肌肉与强度范围", selection: $trainingRange, compact: compact)
+            if let average = result.average {
+                Text("\(average.formatted(.number.precision(.fractionLength(1)))) RIR")
+                    .font(.largeTitle.bold()).monospacedDigit()
+                if !compact, let share = result.hardShare {
+                    LabeledContent("RIR ≤ 3", value: share.formatted(.percent.precision(.fractionLength(0))))
+                }
+            } else {
+                Text("强度未记录").font(.title2.bold())
+                Text("可在记录明细中补录每组 RIR；未记录不会计作 0。")
+                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("已评分 \(result.rated) / \(result.total) 组 · 未记录 \(result.missing) 组")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if !result.weeks.isEmpty {
+                Chart(result.weeks) { week in
+                    LineMark(x: .value("周", week.date), y: .value("平均 RIR", week.average)).foregroundStyle(.orange)
+                    PointMark(x: .value("周", week.date), y: .value("平均 RIR", week.average)).foregroundStyle(.orange)
+                }
+                .chartYScale(domain: 0...max(4, result.weeks.map(\.average).max() ?? 4))
+                .frame(height: compact ? 140 : min(240, max(170, height * 0.32)))
+                .accessibilityLabel("每周已评分组的平均 RIR")
+            }
+            detailsButton(.intensity, title: "强度分布与动作力量趋势")
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func recordsPage(compact: Bool, height: CGFloat) -> some View {
+        let monthly = allWorkouts.filter {
+            $0.finishedAt.map { Calendar.current.isDate($0, equalTo: visibleMonth, toGranularity: .month) } ?? false
+        }.count
+        let summary = BodyAnalytics.summary(store.workouts, now: .now)
+        let recentDays = BodyAnalytics.recordDays(workouts: allWorkouts, weights: allWeights, measurements: store.bodyMeasurements)
+        return VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+            heading(.records, subtitle: "训练日期与全部身体记录")
+            Text("\(visibleMonth.formatted(.dateTime.year().month())) · \(monthly) 次训练")
+                .font(.headline).fixedSize(horizontal: false, vertical: true)
+            Text("累计 \(allWorkouts.count) 次 · 本周 \(summary.week) 次 · 连续 \(summary.consecutiveWeeks) 周")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Chart(store.monthCounts()) { month in
+                BarMark(x: .value("月份", month.month, unit: .month), y: .value("训练次数", month.count))
+                    .foregroundStyle(.green)
+            }
+            .frame(height: compact ? 140 : min(240, max(170, height * 0.30)))
+            .accessibilityLabel("近12个月训练次数")
+            if !compact {
+                Text("最近记录日期").font(.subheadline).foregroundStyle(.secondary)
+                if recentDays.isEmpty { Text("还没有记录").foregroundStyle(.secondary) }
+                ForEach(Array(recentDays.prefix(2)), id: \.self) { day in
+                    Button {
+                        selectedRecordDate = day
+                        visibleMonth = day
+                        detail = .records
+                    } label: {
+                        Text(day, format: .dateTime.year().month().day().weekday())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.buttonStyle(.glass)
+                    .accessibilityHint("打开这一天的训练、称重与围度明细")
+                }
+            }
+            detailsButton(.records, title: "日历与全部记录")
+        }.fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func minimalContent(_ section: BodySection) -> some View {
+        // At accessibility sizes / short landscape heights, the sheet keeps the
+        // complete charts and editable history scrollable instead of clipping a card.
+        ViewThatFits(in: .vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(section.rawValue, systemImage: section.symbol).font(.headline)
+                if section == .weight, let latest = allWeights.last {
+                    Text("\(formatKg(latest.kilograms)) kg").font(.title2.bold()).monospacedDigit()
+                }
+                detailsButton(section, title: "查看\(section.rawValue)详情")
+            }.fixedSize(horizontal: false, vertical: true)
+            // The shortest landscape + largest text combination still has a readable
+            // system button to the complete scrolling content, without a nested scroller.
+            Button("\(section.rawValue)详情") {
+                if section == .records { selectedRecordDate = nil }
+                detail = section
+            }
+                .buttonStyle(.glass).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// All expanding content lives in a native sheet, independent of the four page heights.
+private struct BodyDetailSheet: View {
+    @Environment(GymStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let section: BodySection
+    @Binding var weightRange: BodyRange
+    @Binding var trainingRange: BodyRange
+    var recordDate: Date?
+    var recordMonth: Date
     @State private var selectedWeightDate: Date?
     @State private var entry: BodyEntryRequest?
     @State private var showGoal = false
@@ -13,46 +320,34 @@ struct BodyView: View {
     @State private var weighInLimit = 10
     @State private var exerciseId = ""
 
-    private enum BodySection: String, CaseIterable, Identifiable {
-        case weight = "体重", muscle = "肌肉", intensity = "强度", records = "记录"
-        var id: String { rawValue }
-    }
     private var sessions: [WorkoutSession] { BodyAnalytics.workouts(store.workouts, range: trainingRange, now: .now) }
     private var weights: [WeighIn] { BodyAnalytics.weights(store.weighIns, range: weightRange, now: .now) }
     private var allWeights: [WeighIn] { BodyAnalytics.weights(store.weighIns, range: .all, now: .now) }
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                List {
-                    weightSection.id(BodySection.weight)
+            List {
+                switch section {
+                case .weight:
+                    weightSection
+                    measurementSection
+                case .muscle:
+                    muscleSection
+                case .intensity:
+                    intensitySection
+                    Section("动作力量趋势") { exerciseChart }
+                case .records:
                     trainingSummary
-                    muscleSection.id(BodySection.muscle)
-                    intensitySection.id(BodySection.intensity)
-                    progressSection
-                    BodyRecordsSection { entry = $0 }.id(BodySection.records)
-                }
-                .listStyle(.insetGrouped)
-                .safeAreaBar(edge: .top) {
-                    // Native grouped buttons are anchors, not a tab/segmented selection:
-                    // tapping the same anchor again must still scroll after a manual swipe.
-                    ControlGroup {
-                        ForEach(BodySection.allCases) { section in
-                            Button(section.rawValue) {
-                                withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo(section, anchor: .top) }
-                            }
-                        }
-                    }
-                    .controlGroupStyle(.navigation)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal).padding(.vertical, 8)
-                    .accessibilityHint("在同一页面中定位到所选区域")
+                    BodyRecordsSection(selectedDate: recordDate, visibleMonth: recordMonth) { entry = $0 }
                 }
             }
-            .navigationTitle("身体")
+            .listStyle(.insetGrouped)
+            .navigationTitle("\(section.rawValue)详情")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu("记录", systemImage: "plus") {
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu("新增记录", systemImage: "plus") {
                         Button("体重与体脂", systemImage: "scalemass") { entry = .weight() }
                         Button("身体围度", systemImage: "ruler") { entry = .measurement() }
                     }
@@ -74,6 +369,8 @@ struct BodyView: View {
             }
             .tint(.green)
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 
     private var weightSection: some View {
@@ -81,17 +378,11 @@ struct BodyView: View {
             if let latest = allWeights.last {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("最新体重").font(.subheadline).foregroundStyle(.secondary)
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(formatKg(latest.kilograms)).font(.largeTitle.bold()).monospacedDigit()
-                        Text("kg").foregroundStyle(.secondary)
-                        Spacer()
-                        if weights.count > 1, let first = weights.first, let last = weights.last {
-                            VStack(alignment: .trailing, spacing: 3) {
-                                Text("\(signedKg(last.kilograms - first.kilograms)) kg").font(.headline).monospacedDigit()
-                                Text(weightRange == .all ? "全部记录变化" : "近\(weightRange.rawValue)天变化")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
+                    Text("\(formatKg(latest.kilograms)) kg").font(.largeTitle.bold()).monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                    if weights.count > 1, let first = weights.first, let last = weights.last {
+                        LabeledContent(weightRange == .all ? "全部记录变化" : "近\(weightRange.rawValue)天变化",
+                                       value: "\(signedKg(last.kilograms - first.kilograms)) kg")
                     }
                     Text(latest.date, format: .dateTime.year().month().day()).font(.subheadline).foregroundStyle(.secondary)
                 }.padding(.vertical, 4)
@@ -100,17 +391,14 @@ struct BodyView: View {
             }
             Picker("体重范围", selection: $weightRange) {
                 ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.menu)
             if !weights.isEmpty { weightChart }
             else if !allWeights.isEmpty { Text("所选时间内没有称重记录，试试选择“全部”。").foregroundStyle(.secondary) }
-            HStack {
-                Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.glassProminent)
-                Spacer()
-                Button(store.targetKg.map { "目标 \(formatKg($0)) kg" } ?? "设置目标", systemImage: "scope") {
-                    goalText = store.targetKg.map(formatKg) ?? ""
-                    showGoal = true
-                }.buttonStyle(.glass)
-            }
+            Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.glassProminent)
+            Button(store.targetKg.map { "目标 \(formatKg($0)) kg" } ?? "设置目标", systemImage: "scope") {
+                goalText = store.targetKg.map(formatKg) ?? ""
+                showGoal = true
+            }.buttonStyle(.glass)
             composition
             DisclosureGroup("称重记录 · \(allWeights.count)条") {
                 ForEach(Array(allWeights.reversed().prefix(weighInLimit))) { point in
@@ -129,39 +417,8 @@ struct BodyView: View {
     }
 
     private var weightChart: some View {
-        let points = weights
-        let values = points.map(\.kilograms) + (store.targetKg.map { [$0] } ?? [])
-        let low = values.min() ?? 0
-        let high = values.max() ?? 1
-        let padding = max(0.5, (high - low) * 0.15)
-        return VStack(alignment: .leading, spacing: 8) {
-            Chart {
-                ForEach(points) { point in
-                    LineMark(x: .value("日期", point.date), y: .value("体重 kg", point.kilograms)).foregroundStyle(.green)
-                    PointMark(x: .value("日期", point.date), y: .value("体重 kg", point.kilograms)).foregroundStyle(.green).symbolSize(18)
-                }
-                if let target = store.targetKg {
-                    RuleMark(y: .value("目标 kg", target)).foregroundStyle(.secondary)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                        .annotation(position: .top, alignment: .leading) { Text("目标 \(formatKg(target)) kg").font(.caption2) }
-                }
-                if let point = selectedWeight(in: points) {
-                    RuleMark(x: .value("所选日期", point.date)).foregroundStyle(.secondary)
-                }
-            }
-            .chartYScale(domain: max(0, low - padding)...(high + padding))
-            .chartXSelection(value: $selectedWeightDate).frame(height: 200)
-            .accessibilityLabel("体重变化曲线，\(points.count)条记录")
-            if let point = selectedWeight(in: points) {
-                Text("\(point.date.formatted(date: .abbreviated, time: .omitted)) · \(formatKg(point.kilograms)) kg")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }.padding(.vertical, 8)
-    }
-
-    private func selectedWeight(in points: [WeighIn]) -> WeighIn? {
-        guard let date = selectedWeightDate else { return nil }
-        return points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+        BodyWeightChart(points: weights, target: store.targetKg, selectedDate: $selectedWeightDate, height: 220)
+            .padding(.vertical, 8)
     }
 
     private var composition: some View {
@@ -215,7 +472,7 @@ struct BodyView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.title2.bold()).monospacedDigit()
-        }.fixedSize(horizontal: true, vertical: false).accessibilityElement(children: .combine)
+        }.fixedSize(horizontal: false, vertical: true).accessibilityElement(children: .combine)
     }
 
     private var muscleSection: some View {
@@ -225,7 +482,7 @@ struct BodyView: View {
         return Section {
             Picker("统计范围（肌肉与强度）", selection: $trainingRange) {
                 ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.menu)
             BodyMuscleMap(loads: loads)
             Text("按已完成组数与动作的肌群参与权重统计；颜色相对于本期训练最多的肌群。").font(.caption).foregroundStyle(.secondary)
             if loads.isEmpty {
@@ -273,7 +530,7 @@ struct BodyView: View {
                 }
             } else {
                 Label("强度未记录", systemImage: "gauge.with.dots.needle.33percent")
-                Text("训练完成一组后，或展开下方历史记录，即可选填还能完成的次数（RIR）。").foregroundStyle(.secondary)
+                Text("训练完成一组后，或在“记录”页的明细中展开训练，即可选填还能完成的次数（RIR）。").foregroundStyle(.secondary)
             }
             Text("已评分 \(result.rated) / \(result.total) 组 · 未记录 \(result.missing) 组").font(.subheadline).foregroundStyle(.secondary)
             DisclosureGroup("强度趋势与分布") {
@@ -297,19 +554,20 @@ struct BodyView: View {
         } header: { Text("训练强度") }
     }
 
-    private var progressSection: some View {
-        Section("更多趋势") {
-            DisclosureGroup("动作力量趋势") { exerciseChart }
-            DisclosureGroup("身体围度") {
-                if let latest = store.bodyMeasurements.max(by: { $0.date < $1.date }) {
-                    Text(latest.date, format: .dateTime.year().month().day()).font(.caption).foregroundStyle(.secondary)
-                    ForEach(BodyMeasurement.fields, id: \.self) { field in
-                        if let value = latest.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
-                    }
-                } else { Text("还没有围度记录").foregroundStyle(.secondary) }
-                Button("记围度", systemImage: "plus") { entry = .measurement() }.buttonStyle(.glass)
-                Text("按日期回看围度记录，请在下方记录区选择“围度”。").font(.caption).foregroundStyle(.secondary)
-            }
+    private var measurementSection: some View {
+        Section("身体围度") {
+            if let latest = store.bodyMeasurements.max(by: { $0.date < $1.date }) {
+                Text(latest.date, format: .dateTime.year().month().day()).font(.caption).foregroundStyle(.secondary)
+                ForEach(BodyMeasurement.fields, id: \.self) { field in
+                    if let value = latest.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
+                }
+                ForEach(latest.centimeters.keys.filter { !BodyMeasurement.fields.contains($0) }.sorted(), id: \.self) { field in
+                    if let value = latest.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
+                }
+                if let fat = latest.bodyFatPercent { LabeledContent("体脂率", value: "\(formatKg(fat))%") }
+            } else { Text("还没有围度记录").foregroundStyle(.secondary) }
+            Button("记围度", systemImage: "plus") { entry = .measurement() }.buttonStyle(.glass)
+            Text("按日期回看围度记录，请在“记录”页的明细中选择“围度”。").font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -332,6 +590,50 @@ struct BodyView: View {
                 }.frame(height: 180).chartYScale(domain: .automatic(includesZero: false))
                 Text(series.usesReps ? "每次训练完成的最多次数" : "每次训练完成的最大重量").font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+private struct BodyWeightChart: View {
+    let points: [WeighIn]
+    let target: Double?
+    @Binding var selectedDate: Date?
+    let height: CGFloat
+
+    private var selectedPoint: WeighIn? {
+        guard let date = selectedDate else { return nil }
+        return points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    }
+
+    var body: some View {
+        let values = points.map(\.kilograms) + (target.map { [$0] } ?? [])
+        let low = values.min() ?? 0
+        let high = values.max() ?? 1
+        let padding = max(0.5, (high - low) * 0.15)
+        VStack(alignment: .leading, spacing: 8) {
+            Chart {
+                ForEach(points) { point in
+                    LineMark(x: .value("日期", point.date), y: .value("体重 kg", point.kilograms)).foregroundStyle(.green)
+                    PointMark(x: .value("日期", point.date), y: .value("体重 kg", point.kilograms)).foregroundStyle(.green).symbolSize(18)
+                }
+                if let target {
+                    RuleMark(y: .value("目标 kg", target)).foregroundStyle(.secondary)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .annotation(position: .top, alignment: .leading) { Text("目标 \(formatKg(target)) kg").font(.caption2) }
+                }
+                if let point = selectedPoint {
+                    RuleMark(x: .value("所选日期", point.date)).foregroundStyle(.secondary)
+                }
+            }
+            .chartYScale(domain: max(0, low - padding)...(high + padding))
+            .chartXSelection(value: $selectedDate)
+            .frame(height: height)
+            .accessibilityLabel("体重变化曲线，\(points.count)条记录")
+            // Reserve a caption before interaction; the enclosing page retains its viewport height.
+            Text(selectedPoint.map { "\($0.date.formatted(date: .abbreviated, time: .omitted)) · \(formatKg($0.kilograms)) kg" }
+                 ?? "轻触或拖动曲线查看记录")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

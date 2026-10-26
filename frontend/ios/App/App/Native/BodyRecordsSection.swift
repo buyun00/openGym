@@ -10,6 +10,12 @@ struct BodyRecordsSection: View {
     @State private var allHistory = false
     @State private var dayLimit = 7
 
+    init(selectedDate: Date? = nil, visibleMonth: Date = .now, onEntry: @escaping (BodyEntryRequest) -> Void) {
+        self.onEntry = onEntry
+        _selectedDate = State(initialValue: selectedDate)
+        _visibleMonth = State(initialValue: selectedDate ?? visibleMonth)
+    }
+
     private enum RecordFilter: String, CaseIterable, Identifiable {
         case all = "全部", training = "训练", weight = "称重", measurement = "围度"
         var id: String { rawValue }
@@ -56,11 +62,10 @@ struct BodyRecordsSection: View {
             }
             Picker("记录类型", selection: $filter) {
                 ForEach(RecordFilter.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.menu)
             if let selectedDate {
-                HStack {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(selectedDate, format: .dateTime.year().month().day()).font(.subheadline)
-                    Spacer()
                     Button("取消日期筛选") { self.selectedDate = nil }
                 }
             } else {

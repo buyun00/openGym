@@ -10,7 +10,7 @@ struct PlanView: View {
     @State private var showNew = false
     @State private var newName = ""
     @State private var pendingDelete: UUID?
-    @State private var collapsedRoutines: Set<UUID> = []
+    @State private var expandedRoutines: Set<UUID> = []
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -35,7 +35,8 @@ struct PlanView: View {
                                 PlanExerciseDetail(slot: slot, number: index + 1,
                                                    startingWeight: preview.indices.contains(index) ? preview[index].sets.first?.weight : nil)
                                     .padding(.vertical, 8)
-                                if index < routine.exercises.count - 1 { Divider() }
+                                    // A standalone Divider becomes an extra List row with its own minimum height.
+                                    .listRowSeparator(.visible, edges: .bottom)
                             }
                             NavigationLink {
                                 RoutineEditorView(routineId: routine.id)
@@ -88,12 +89,19 @@ struct PlanView: View {
             }
         }
         .tint(.green)
+        .onChange(of: store.tab) { _, tab in
+            if tab == .plan { expandedRoutines.removeAll() }
+        }
+        .onChange(of: store.routines.map(\.id)) { _, ids in
+            // Keep explicit choices for surviving plans; new or synced plans stay closed.
+            expandedRoutines.formIntersection(ids)
+        }
     }
 
-    // An exclusion set also leaves newly added / synced routines expanded by default.
+    // Only a disclosure tap opts a plan in; an empty set means every plan is collapsed.
     private func expansion(for id: UUID) -> Binding<Bool> {
-        Binding(get: { !collapsedRoutines.contains(id) }, set: { expanded in
-            if expanded { collapsedRoutines.remove(id) } else { collapsedRoutines.insert(id) }
+        Binding(get: { expandedRoutines.contains(id) }, set: { expanded in
+            if expanded { expandedRoutines.insert(id) } else { expandedRoutines.remove(id) }
         })
     }
 

@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Anatomy is content: licensed vector images tinted by real data. The list,
+/// Anatomy is content: licensed vector images tinted by real data. The cards, list,
 /// disclosures, progress bars and controls around it are all system components.
 struct BodyMuscleMap: View {
     var loads: [MuscleLoad]
+    var maximumFigureHeight: CGFloat? = nil
+    var showsLegend = true
 
     var body: some View {
         VStack(spacing: 12) {
@@ -11,8 +13,11 @@ struct BodyMuscleMap: View {
                 figure("front", title: "正面", ratio: 727.0 / 1280.0)
                 figure("back", title: "背面", ratio: 727.0 / 1280.0)
             }
-            Text("灰色：本期未覆盖；绿色越鲜明，记录的训练组数越多。")
-                .font(.caption).foregroundStyle(.secondary)
+            if showsLegend {
+                Text("灰色：本期未覆盖；绿色越鲜明，记录的训练组数越多。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .ignore)
@@ -29,7 +34,9 @@ struct BodyMuscleMap: View {
                     Image("BodyMap-\(side)-\(muscle)").resizable().renderingMode(.template)
                         .scaledToFit().foregroundStyle(color(muscle))
                 }
-            }.aspectRatio(ratio, contentMode: .fit)
+            }
+            .aspectRatio(ratio, contentMode: .fit)
+            .frame(maxHeight: maximumFigureHeight)
             Text(title).font(.caption).foregroundStyle(.secondary)
         }
     }

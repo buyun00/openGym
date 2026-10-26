@@ -3,6 +3,7 @@
 Requires tree-sitter==0.26.0, tree-sitter-swift==0.7.4, openstep-parser==2.0.3.
 """
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import re
@@ -14,6 +15,11 @@ from openstep_parser import OpenStepDecoder
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[2]
+arguments = argparse.ArgumentParser(description=__doc__)
+arguments.add_argument("--report", default="docs/dev/body-page-static-checks-2026-10-23.json",
+                       help="Output path relative to the repository; use a new path for a new validation run.")
+arguments.add_argument("--paging", action="store_true", help="Also check the four-page body refinement structure.")
+options = arguments.parse_args()
 IOS = ROOT / "frontend/ios"
 NATIVE = IOS / "App/App/Native"
 OWNED = ["BodyView.swift", "BodyAnalytics.swift", "BodyCalendarView.swift", "BodyEntrySheet.swift",
@@ -84,16 +90,45 @@ checks = {
     "native_calendar_not_custom_grid": "LazyVGrid" not in body and "UICalendarSelectionSingleDate" in body,
     "no_screenshot_or_mockup_in_production": all(token not in body for token in ["IMG_130", "generated_images", "85.5", "25.6", "63.6"]),
 }
+if options.paging:
+    view = (NATIVE / "BodyView.swift").read_text("utf8")
+    main = view.split("struct BodyView: View {", 1)[1].split("private struct BodyDetailSheet: View {", 1)[0]
+    detail = view.split("private struct BodyDetailSheet: View {", 1)[1]
+    records = (NATIVE / "BodyRecordsSection.swift").read_text("utf8")
+    checks.update({
+        "exactly_four_page_cases": 'case weight = "体重", muscle = "肌肉", intensity = "强度", records = "记录"' in view,
+        "native_viewport_paging": all(token in main for token in ["LazyVStack(spacing: 0)", r"ForEach(BodySection.allCases, id: \.self)",
+            ".containerRelativeFrame(.vertical)", ".scrollTargetLayout()", ".scrollTargetBehavior(.paging)"]),
+        "bidirectional_page_navigation": '.scrollPosition(id: $visibleSection, anchor: .top)' in main
+            and 'get: { visibleSection ?? .weight }' in main and 'visibleSection = section' in main
+            and 'selection: pageSelection' in main,
+        "inline_toolbar_navigation": '.navigationBarTitleDisplayMode(.inline)' in main
+            and 'ToolbarItem(placement: .principal) { pageNavigation }' in main
+            and all(token not in main for token in ["safeAreaBar", "ScrollViewReader"]),
+        "main_pages_do_not_expand_or_ignore_safe_area": all(token not in main for token in
+            ["List {", "DisclosureGroup", "BodyCalendarView(", ".ignoresSafeArea", "UIScreen", ".clipped()", ".minimumScaleFactor", ".lineLimit("]),
+        "compact_and_accessibility_detail_fallback": all(token in main for token in
+            ["ViewThatFits(in: .vertical)", "typeSize.isAccessibilitySize", "minimalContent(section)", ".sheet(item: $detail)"]),
+        "record_date_handoff": "recordDate: selectedRecordDate, recordMonth: visibleMonth" in main
+            and "selectedRecordDate = day" in main
+            and "BodyRecordsSection(selectedDate: recordDate, visibleMonth: recordMonth)" in detail
+            and "_selectedDate = State(initialValue: selectedDate)" in records,
+        "detail_edits_and_errors_remain_native": all(token in detail for token in
+            ["List {", ".sheet(item: $entry)", 'Button("完成")', 'get: { store.saveError != nil && entry == nil }',
+             "store.deleteWeighIn", "store.setTarget", "exerciseChart", "measurementSection"])
+            and all(token in records for token in ["store.setRIR", "store.deleteWorkout", "store.deleteMeasurement", "onEntry(.weight", "onEntry(.measurement"]),
+    })
 report = {
     "scope": "Windows static syntax, project and source/asset checks ONLY; NOT Swift typechecking, XCTest execution, Xcode build or iOS runtime",
     "checks": checks, "swift_files_parsed": len(files), "syntax_errors": errors,
     "missing_build_sources": missing, "other_missing_native_sources": all_missing,
     "vector_template_assets_checked": len(asset_files) // 2, "asset_errors": asset_errors,
     "swift_tests_defined_but_not_executed": len(re.findall(r"func test\w+\(", tests)),
-    "unverified": ["Swift typecheck and Swift XCTest", "Xcode build and asset catalog compilation", "iPhone/iPad runtime, native Liquid Glass and calendar layout", "VoiceOver, Dynamic Type and light/dark screenshots"],
+    "unverified": ["Swift typecheck and Swift XCTest", "Xcode build and asset catalog compilation", "iPhone/iPad runtime, native Liquid Glass and calendar layout", "VoiceOver, Dynamic Type and light/dark screenshots",
+                   "Paging gestures, toolbar selection synchronization and safe-area fit on device"],
     "sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files + asset_files + [project_file, NATIVE / "BodyMapNotices.txt"]}
 }
-output = ROOT / "docs/dev/body-page-static-checks-2026-10-23.json"
+output = ROOT / options.report
 output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf8")
 print(json.dumps({key: value for key, value in report.items() if key != "sha256"}, ensure_ascii=False, indent=2))
 sys.exit(0 if all(checks.values()) else 1)

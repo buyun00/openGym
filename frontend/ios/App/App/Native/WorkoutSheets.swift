@@ -5,17 +5,13 @@ struct WorkoutSessionSheet: View {
     @Environment(GymStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     var destination: WorkoutSheet
-    @State private var discard = false
+    var requestDiscard: () -> Void
 
     var body: some View {
         NavigationStack {
-            WorkoutSheetContent(destination: destination, close: { dismiss() }, discard: { discard = true })
+            WorkoutSheetContent(destination: destination, close: { dismiss() }, discard: requestDiscard)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) } }
         }
-        .confirmationDialog("放弃训练？", isPresented: $discard, titleVisibility: .visible) {
-            Button("放弃训练", role: .destructive) { store.discardActive(); if store.active == nil { dismiss() } }
-            Button("继续训练", role: .cancel) {}
-        } message: { Text("本次记录将被删除。") }
         .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil }, set: { if !$0 { store.saveError = nil } })) {
             Button("好") { store.saveError = nil }
         } message: { Text(store.saveError ?? "") }
@@ -112,22 +108,32 @@ private struct WorkoutSheetContent: View {
     }
 
     private var finish: some View {
-        List {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
                 if store.activeDoneCount == 0 {
                     Text("你还没有勾选任何组。仍要结束训练吗？").foregroundStyle(.secondary)
                 } else if store.activeDoneCount < store.activeSetCount {
                     Text("还有 \(store.activeSetCount - store.activeDoneCount) 组未完成，仍要结束训练吗？").foregroundStyle(.secondary)
                 } else { Text("已完成 \(store.activeDoneCount) 组").foregroundStyle(.secondary) }
                 Button { store.finishActive(); if store.active == nil { close() } } label: {
-                    Label("结束并保存", systemImage: "flag.checkered").frame(maxWidth: .infinity, alignment: .leading)
+                    Label("结束并保存", systemImage: "flag.checkered").frame(maxWidth: .infinity, minHeight: 28)
                 }.buttonStyle(.glassProminent).controlSize(.large)
+
+                Button(action: close) {
+                    Text("继续训练").frame(maxWidth: .infinity, minHeight: 28)
+                }.buttonStyle(.bordered).controlSize(.large)
+
+                Divider()
+                Button(role: .destructive, action: discard) {
+                    Label("放弃不保存", systemImage: "trash").frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.plain).foregroundStyle(.red)
             }
-            Section {
-                Button(role: .destructive, action: discard) { Label("放弃训练", systemImage: "trash").frame(maxWidth: .infinity, alignment: .leading) }
-                    .buttonStyle(.glass).controlSize(.large)
-            }
-        }.navigationTitle(store.activeDoneCount == 0 ? "还没有记录" : store.activeDoneCount < store.activeSetCount ? "提前结束？" : "结束训练？")
+            .padding(16).frame(maxWidth: 560, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
+            .padding(16).frame(maxWidth: .infinity)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .navigationTitle(store.activeDoneCount == 0 ? "还没有记录" : store.activeDoneCount < store.activeSetCount ? "提前结束？" : "结束训练？")
     }
 }
 
