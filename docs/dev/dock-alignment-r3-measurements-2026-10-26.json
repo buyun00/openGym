@@ -1,0 +1,166 @@
+{
+  "scope": "Measurement of supplied pre-R3 device screenshot only; NOT a post-fix visual pass",
+  "image": "C:\\Users\\win11\\AppData\\Local\\Temp\\codex-clipboard-30160dcb-3775-46cd-b844-ee5f6389bf65.png",
+  "sha256": "4ba8c098bf15195548f0caa3decd44ee4d4674572ae9480cfd277edc5263c474",
+  "resolution_px": [
+    1260,
+    2736
+  ],
+  "coordinate_convention": "Zero-based original pixel centers; edge boundaries midway between adjacent samples",
+  "action": {
+    "blue_minus_green_threshold": 70,
+    "inclusive_pixel_bbox": [
+      48,
+      2482,
+      203,
+      2637
+    ],
+    "fitted_center_px": [
+      125.49974576132607,
+      2559.966344137552
+    ],
+    "fitted_radius_px": 77.77607499434473
+  },
+  "action_threshold_sensitivity": [
+    {
+      "blue_minus_green_threshold": 60,
+      "inclusive_pixel_bbox": [
+        48,
+        2482,
+        203,
+        2637
+      ],
+      "fitted_center_px": [
+        125.4988477211911,
+        2559.965354042845
+      ],
+      "fitted_radius_px": 77.88143568689695
+    },
+    {
+      "blue_minus_green_threshold": 70,
+      "inclusive_pixel_bbox": [
+        48,
+        2482,
+        203,
+        2637
+      ],
+      "fitted_center_px": [
+        125.49974576132607,
+        2559.966344137552
+      ],
+      "fitted_radius_px": 77.77607499434473
+    },
+    {
+      "blue_minus_green_threshold": 90,
+      "inclusive_pixel_bbox": [
+        48,
+        2483,
+        203,
+        2637
+      ],
+      "fitted_center_px": [
+        125.50000000000263,
+        2560.000000000003
+      ],
+      "fitted_radius_px": 77.574479303594
+    },
+    {
+      "blue_minus_green_threshold": 110,
+      "inclusive_pixel_bbox": [
+        48,
+        2483,
+        203,
+        2637
+      ],
+      "fitted_center_px": [
+        125.50000000000306,
+        2559.999999999998
+      ],
+      "fitted_radius_px": 77.39113814685206
+    }
+  ],
+  "capsule": {
+    "edge_definition": "Strongest outer-outline to inner-material RGB transition; excludes outside shadow",
+    "bounds_px": [
+      290.5,
+      2486.5,
+      1172.5,
+      2672.5
+    ],
+    "center_px": [
+      731.5,
+      2579.5
+    ],
+    "vertical_band_crosschecks": [
+      {
+        "x_band_exclusive_end": [
+          504,
+          1008
+        ],
+        "top": {
+          "boundary_px": 2486.5,
+          "rgb_jump_magnitude": 133.45036530485783
+        },
+        "bottom": {
+          "boundary_px": 2672.5,
+          "rgb_jump_magnitude": 134.7080175787618
+        },
+        "center_y_px": 2579.5
+      },
+      {
+        "x_band_exclusive_end": [
+          604,
+          907
+        ],
+        "top": {
+          "boundary_px": 2486.5,
+          "rgb_jump_magnitude": 129.96538000559994
+        },
+        "bottom": {
+          "boundary_px": 2672.5,
+          "rgb_jump_magnitude": 129.51447795516916
+        },
+        "center_y_px": 2579.5
+      },
+      {
+        "x_band_exclusive_end": [
+          403,
+          1108
+        ],
+        "top": {
+          "boundary_px": 2486.5,
+          "rgb_jump_magnitude": 130.49904214207857
+        },
+        "bottom": {
+          "boundary_px": 2672.5,
+          "rgb_jump_magnitude": 134.43957750603056
+        },
+        "center_y_px": 2579.5
+      }
+    ],
+    "horizontal_center_rows_exclusive_end": [
+      2574,
+      2587
+    ],
+    "left": {
+      "boundary_px": 290.5,
+      "rgb_jump_magnitude": 187.91753510516256
+    },
+    "right": {
+      "boundary_px": 1172.5,
+      "rgb_jump_magnitude": 185.15939079614623
+    }
+  },
+  "capsule_minus_action_center_y_px": 19.533655862448086,
+  "threshold_sensitivity_delta_range_px": [
+    19.499999999996817,
+    19.534645957155135
+  ],
+  "edge_definition_tolerance_px": 1.0,
+  "conclusion": "Start action is above the visible tab capsule center",
+  "limitations": [
+    "No UIKit runtime frames or R2 diagnostic branch were supplied",
+    "Screenshot pixel scale is not assumed; no pixel value is used as an app layout offset",
+    "This color/edge method is tailored to this screenshot, not arbitrary screenshots"
+  ]
+}

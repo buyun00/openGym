@@ -129,13 +129,25 @@ private enum NativeNavigationTabs {
     ]
 }
 
+// Observe the system bar's layout without replacing its drawing or gestures.
+// UIKit can lay out the glass after its parent controller has finished a pass.
+private final class LayoutReportingTabBar: UITabBar {
+    var didLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        didLayout?()
+    }
+}
+
 private final class RootNavigationController<Content: View>: UIViewController, UITabBarDelegate {
     let hosting: UIHostingController<Content>
-    private let tabBar = UITabBar(frame: .zero)
+    private let tabBar = LayoutReportingTabBar(frame: .zero)
     private let startButton = UIButton(type: .system)
     private var select: (AppTab) -> Void = { _ in }
     private var start: () -> Void = {}
     private var keyboardVisible = false
+    private var alignmentScheduled = false
     private let actionDiameter: CGFloat = 52
     private let contentClearance: CGFloat = 12
     #if DEBUG
@@ -160,6 +172,7 @@ private final class RootNavigationController<Content: View>: UIViewController, U
         hosting.didMove(toParent: self)
 
         tabBar.delegate = self
+        tabBar.didLayout = { [weak self] in self?.scheduleVisualAlignment() }
         tabBar.itemPositioning = .fill
         tabBar.setItems(NativeNavigationTabs.destinations.enumerated().map { index, destination in
             let item = UITabBarItem(title: destination.title, image: UIImage(systemName: destination.symbol), tag: index)
@@ -202,6 +215,18 @@ private final class RootNavigationController<Content: View>: UIViewController, U
         view.setNeedsLayout()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        scheduleVisualAlignment()
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.scheduleVisualAlignment()
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         guard view.bounds.width > 0, view.bounds.height > 0 else { return }
@@ -237,28 +262,114 @@ private final class RootNavigationController<Content: View>: UIViewController, U
         tabBar.frame = CGRect(x: tabX, y: view.bounds.maxY - nativeHeight, width: tabWidth, height: nativeHeight)
         tabBar.layoutIfNeeded()
 
-        // Prefer the real laid-out native item/control frames, not the tab
-        // bar's outer frame (which also includes bottom safe-area space).
-        let measuredItems = tabItemRegion()
-        let itemRegion = measuredItems.rect ?? tabBar.convert(tabBar.safeAreaLayoutGuide.layoutFrame, to: view)
-        startButton.frame = CGRect(x: rowX + 16, y: itemRegion.midY - actionDiameter / 2,
+        // This guide is only a bootstrap position before the material exists.
+        // Hit targets and the bar's safe area do not describe its visible pill.
+        let bootstrap = tabBar.convert(tabBar.safeAreaLayoutGuide.layoutFrame, to: view)
+        startButton.frame = CGRect(x: rowX + 16, y: bootstrap.midY - actionDiameter / 2,
                                    width: actionDiameter, height: actionDiameter)
-        let occupiedTop = min(tabBar.frame.minY, min(itemRegion.minY, startButton.frame.minY))
+        alignStartToVisibleSurface(pass: "parent-layout")
+    }
+
+    private func scheduleVisualAlignment() {
+        guard !alignmentScheduled else { return }
+        alignmentScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.alignmentScheduled = false
+            guard self.viewIfLoaded?.window != nil, !self.keyboardVisible else { return }
+            // Read the finished geometry only. Scheduling another bar/root
+            // layout here would create a layout -> dispatch -> layout loop.
+            self.alignStartToVisibleSurface(pass: "native-layout-completed")
+        }
+    }
+
+    private func alignStartToVisibleSurface(pass: String) {
+        guard !keyboardVisible, !startButton.bounds.isEmpty else { return }
+        let surface = visibleTabSurface()
+        if let surfaceRect = surface.rect {
+            var actionFrame = startButton.frame
+            actionFrame.origin.y = surfaceRect.midY - actionDiameter / 2
+            startButton.frame = actionFrame
+        }
+        let system = windowSafeInsets()
+        let occupiedTop = min(tabBar.frame.minY, min(surface.rect?.minY ?? tabBar.frame.minY, startButton.frame.minY))
         let requiredBottom = view.bounds.maxY - occupiedTop + contentClearance
         reserveContent(system: system, bottom: max(system.bottom, requiredBottom))
         #if DEBUG
-        let diagnostic = "bounds=\(view.bounds) system=\(system) tab=\(tabBar.frame) fitted=\(nativeHeight) "
-            + "items=\(itemRegion) source=\(measuredItems.source) start=\(startButton.frame) "
+        let centerError = surface.rect.map { String(describing: startButton.frame.midY - $0.midY) } ?? "unresolved"
+        let diagnostic = "bounds=\(view.bounds) system=\(system) tab=\(tabBar.frame) "
+            + "surface=\(String(describing: surface.rect)) source=\(surface.source) "
+            + "hitRegion=\(String(describing: tabItemDiagnosticRegion())) start=\(startButton.frame) "
+            + "visualCenterError=\(centerError) candidates=\(surface.candidates) "
             + "reservedBottom=\(requiredBottom) additional=\(hosting.additionalSafeAreaInsets) "
             + "hostSafe=\(hosting.view.safeAreaInsets)"
         if diagnostic != lastLayoutDiagnostic {
-            print("[RootDockLayout] \(diagnostic)")
+            print("[RootDockLayout] pass=\(pass) \(diagnostic)")
             lastLayoutDiagnostic = diagnostic
         }
         #endif
     }
 
-    private func tabItemRegion() -> (rect: CGRect?, source: String) {
+    private func visibleTabSurface() -> (rect: CGRect?, source: String, candidates: Int) {
+        var surfaces: [(rect: CGRect, source: String, priority: Int)] = []
+        func inspect(_ candidate: UIView) {
+            guard !candidate.isHidden, candidate.alpha > 0.01, !candidate.bounds.isEmpty else { return }
+            let frame = visibleFrame(of: candidate)
+            // A selected item's glass/hit target spans only one destination.
+            // Accept only material spanning most of the native bar's width.
+            if !frame.isNull, frame.width >= tabBar.bounds.width * 0.7,
+               frame.height >= actionDiameter / 2, frame.width > frame.height * 2 {
+                if let effectView = candidate as? UIVisualEffectView {
+                    if effectView.effect is UIGlassEffect {
+                        surfaces.append((frame, "native-glass-surface", 0))
+                    } else if effectView.effect is UIBlurEffect {
+                        surfaces.append((frame, "native-blur-surface", 1))
+                    }
+                    // UIGlassContainerEffect groups surfaces; it is not a
+                    // painted pill. Neither it nor vibrancy is an anchor.
+                } else if !(candidate is UIControl), candidate.layer.cornerRadius >= frame.height * 0.4,
+                          (candidate.backgroundColor?.cgColor.alpha ?? candidate.layer.backgroundColor?.alpha ?? 0) >= 0.9 {
+                    surfaces.append((frame, "native-opaque-rounded-surface", 2))
+                }
+            }
+            for child in candidate.subviews { inspect(child) }
+        }
+        for child in tabBar.subviews { inspect(child) }
+        let sorted = surfaces.sorted {
+            if $0.priority != $1.priority { return $0.priority < $1.priority }
+            return $0.rect.width > $1.rect.width
+        }
+        guard let surface = sorted.first else {
+            // UIKit does not publish a tab-pill layout guide. A future hierarchy
+            // may not expose a recognizable material; never report this as a
+            // measured alignment or silently substitute a control frame.
+            return (nil, "unresolved-bootstrap-not-validated", 0)
+        }
+        return (surface.rect, surface.source, surfaces.count)
+    }
+
+    private func visibleFrame(of candidate: UIView) -> CGRect {
+        var frame = candidate.convert(candidate.bounds, to: view)
+        // Respect a material's mask and clipping ancestors, but exclude its
+        // outside shadow. Read public geometry only; do not mutate native views.
+        if let mask = candidate.mask {
+            frame = frame.intersection(candidate.convert(mask.frame, to: view))
+        } else if let mask = candidate.layer.mask {
+            frame = frame.intersection(candidate.convert(mask.frame, to: view))
+        }
+        var ancestor = candidate.superview
+        while let container = ancestor, container !== view {
+            if container.clipsToBounds {
+                frame = frame.intersection(container.convert(container.bounds, to: view))
+            }
+            ancestor = container.superview
+        }
+        return frame.intersection(view.bounds)
+    }
+
+    #if DEBUG
+    // Preserve R2's measurement for diagnosis only, never for positioning.
+    private func tabItemDiagnosticRegion() -> CGRect? {
         let identifiers = Set(NativeNavigationTabs.destinations.map { "navigation-\($0.tab.rawValue)" })
         var identified: [CGRect] = []
         var controls: [CGRect] = []
@@ -274,18 +385,16 @@ private final class RootNavigationController<Content: View>: UIViewController, U
         }
         for child in tabBar.subviews { inspect(child) }
         let frames: [CGRect]
-        let source: String
         if identified.count == NativeNavigationTabs.destinations.count {
-            frames = identified; source = "native-item-identifiers"
+            frames = identified
         } else if controls.count == NativeNavigationTabs.destinations.count {
-            frames = controls; source = "native-controls"
+            frames = controls
         } else {
-            // No private class names or KVC. Keep a public-guide fallback and
-            // identify it in device diagnostics if UIKit changes its hierarchy.
-            return (nil, "safe-area-guide-fallback")
+            return nil
         }
-        return (frames.reduce(CGRect.null) { $0.union($1) }, source)
+        return frames.reduce(CGRect.null) { $0.union($1) }
     }
+    #endif
 
     private func windowSafeInsets() -> UIEdgeInsets {
         let safeFrame: CGRect
