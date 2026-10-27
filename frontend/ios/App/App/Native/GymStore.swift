@@ -13,6 +13,8 @@ final class GymStore {
     var weighIns: [WeighIn] = []
     var bodyMeasurements: [BodyMeasurement] = []
     var saveError: String?
+    var finishingWorkout = false
+    private let healthReader = WorkoutHealthReader()
     var targetKg: Double?
     var restSeconds: Int = 90
     var ownedEquipment: [String] = []
@@ -227,13 +229,48 @@ final class GymStore {
         updateSet(exercise: exerciseId, set: setId) { $0.reps = min(100, max(0, reps)) }
     }
 
-    func finishActive() {
-        guard let session = active else { return }
+    func finishActive() async {
+        guard let session = active, !finishingWorkout else { return }
+        finishingWorkout = true
+        defer { finishingWorkout = false }
+        let endedAt = Date()
+        let health = UserDefaults.standard.bool(forKey: "workoutHealthEnabled")
+            ? await healthReader.read(start: session.startedAt, end: endedAt, requestPermission: true) : nil
+        // Authorization can suspend while the user navigates or discards the session.
+        guard let current = active, current.id == session.id else { return }
         let previousWorkouts = workouts
-        workouts.append(WorkoutLogic.finished(session, at: Date()))
+        var finished = WorkoutLogic.finished(current, at: endedAt)
+        finished.health = health
+        workouts.append(finished)
         active = nil
         if save() { restEndsAt = nil; refreshWorkoutAlerts(); tab = .today }
-        else { workouts = previousWorkouts; active = session }
+        else { workouts = previousWorkouts; active = current }
+    }
+
+    /// Retry recent missing/partial samples before sync, after Watch-to-phone delivery.
+    /// Never prompt from background sync and never touch the Shortcut body-data path.
+    func refreshWorkoutHealth() async {
+        guard UserDefaults.standard.bool(forKey: "workoutHealthEnabled") else { return }
+        let pending = workouts.filter {
+            guard let end = $0.finishedAt, $0.health != nil else { return false }
+            return end > Date().addingTimeInterval(-86400) &&
+                ($0.health?.heart_rate_avg_bpm == nil || $0.health?.active_energy_kcal == nil)
+        }.suffix(5)
+        for session in pending {
+            guard let end = session.finishedAt else { continue }
+            let result = await healthReader.read(start: session.startedAt, end: end, requestPermission: false)
+            guard let index = workouts.firstIndex(where: { $0.id == session.id }),
+                  var health = workouts[index].health else { continue }
+            let old = health
+            health.heart_rate_avg_bpm = result.heart_rate_avg_bpm ?? health.heart_rate_avg_bpm
+            health.heart_rate_max_bpm = result.heart_rate_max_bpm ?? health.heart_rate_max_bpm
+            health.active_energy_kcal = result.active_energy_kcal ?? health.active_energy_kcal
+            health.workout_id = result.workout_id ?? health.workout_id
+            guard health != old else { continue }
+            health.status = result.status; health.queried_at = result.queried_at
+            workouts[index].health = health
+            if !save() { workouts[index].health = old }
+        }
     }
 
     func discardActive() {

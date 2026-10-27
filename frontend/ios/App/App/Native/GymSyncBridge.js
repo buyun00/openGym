@@ -56,7 +56,7 @@ var GymSyncBridge = (() => {
       routines:list(s.routines).map(r => ({id:uuid(r.id),name:r.name || '',exercises:slots(r.ex,r.id,false)})),
       week:Array.from({length:7},(_,i) => ({day:i+1,routineIds:[].concat(s.week?.[String((i+1)%7)] || []).map(uuid)})),
       workouts:list(s.workouts).map(w => ({id:uuid(w.id || `${w.d}|${w.start}`),name:w.name || '训练',
-        startedAt:w.start ? w.start/1000 : date(w.d),finishedAt:w.end ? w.end/1000 : date(w.d),
+        startedAt:w.start ? w.start/1000 : date(w.d),finishedAt:w.end ? w.end/1000 : date(w.d),health:w.health ?? null,
         exercises:slots(w.entries,w.id || `${w.d}|${w.start}`,true),note:w.note || null,noProgression:w.noProg ?? null})),
       weighIns:list(s.bodyweight).map(w => ({id:uuid(`weight/${w.d}`),date:date(w.d),kilograms:w.w*kg,
         bodyFatPercent:list(s.measurements).find(m=>m.d===w.d)?.bodyFat ?? null})),
@@ -138,7 +138,7 @@ var GymSyncBridge = (() => {
     }
     if (!same(before.workouts,after.workouts)) result.workouts=records(raw.workouts,before.workouts,after.workouts,(w,a,b)=>{
       if (!a) { w.id=b.id; w.d=day(b.startedAt); w.prs=[]; }
-      for (const [n,k] of [['name','name'],['note','note'],['noProgression','noProg']]) update(w,a,b,n,k);
+      for (const [n,k] of [['name','name'],['note','note'],['noProgression','noProg'],['health','health']]) update(w,a,b,n,k);
       update(w,a,b,'startedAt','start',v=>v*1000); update(w,a,b,'finishedAt','end',v=>v*1000);
       if (!same(a?.exercises,b.exercises)) w.entries=records(w.entries,a?.exercises,b.exercises,(e,x,y)=>exercise(e,x,y,true));
       if (!a) { w.routineIds=[...new Set(b.exercises.map(e=>e.routineId).filter(Boolean))].map(routineWebId); w.routineId=w.routineIds[0] || null;

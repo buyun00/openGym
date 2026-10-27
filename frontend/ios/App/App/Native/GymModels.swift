@@ -65,6 +65,19 @@ struct WorkoutSession: Codable, Identifiable, Hashable {
     var restEndsAt: Date? = nil
     var restOwner: UUID? = nil
     var restSetOwner: UUID? = nil
+    var health: WorkoutHealth? = nil
+}
+
+struct WorkoutHealth: Codable, Hashable {
+    var source = "apple_health"
+    var status: String
+    var window_start: Double
+    var window_end: Double
+    var queried_at: Double
+    var workout_id: String? = nil
+    var heart_rate_avg_bpm: Double? = nil
+    var heart_rate_max_bpm: Double? = nil
+    var active_energy_kcal: Double? = nil
 }
 
 enum WorkoutMode: String, Codable, CaseIterable {

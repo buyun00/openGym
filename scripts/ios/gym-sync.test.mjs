@@ -28,6 +28,20 @@ function fixture() {
 const project = s => bridge.projection(s,catalogue);
 const prepare = (b,l,r) => bridge.prepare(b,l,r,catalogue);
 
+test('HealthKit results survive upload, readback and unrelated web edits',()=>{
+  const raw=fixture(),base=project(raw),local=copy(base);
+  const health={source:'apple_health',status:'available',window_start:raw.workouts[0].start,
+    window_end:raw.workouts[0].end,queried_at:raw.workouts[0].end+1000,
+    heart_rate_avg_bpm:125.2,heart_rate_max_bpm:160,active_energy_kcal:230};
+  local.workouts[0].health=health;
+  const remote=copy(raw); remote.workouts[0].note='web edit';
+  const out=prepare(base,local,remote);
+  assert.deepEqual(out.state.workouts[0].health,health);
+  assert.equal(out.state.workouts[0].note,'web edit');
+  assert.deepEqual(project(out.state).workouts[0].health,health);
+  assert.equal(prepare(project(out.state),project(out.state),out.state).changed,false);
+});
+
 test('an unchanged native projection preserves the complete server document exactly',()=>{
   const raw=fixture(), view=project(raw), out=prepare(view,view,raw);
   assert.equal(out.changed,false); assert.deepEqual(out.state,raw);

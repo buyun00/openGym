@@ -156,6 +156,19 @@ struct BodyRecordsSection: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label(session.name, systemImage: "dumbbell")
                         Text(workoutDescription(session)).font(.caption).foregroundStyle(.secondary)
+                        if let health = session.health {
+                            if let average = health.heart_rate_avg_bpm {
+                                Text("平均心率 \(formatKg(average)) bpm · 峰值 \(health.heart_rate_max_bpm.map(formatKg) ?? "—") bpm")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            if let energy = health.active_energy_kcal {
+                                Text("活动能量 \(formatKg(energy)) kcal").font(.caption).foregroundStyle(.secondary)
+                            }
+                            if health.heart_rate_avg_bpm == nil && health.active_energy_kcal == nil {
+                                Text("健康数据暂不可用，可在手表同步后重试同步")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 .swipeActions { Button("删除", role: .destructive) { store.deleteWorkout(session.id) } }
