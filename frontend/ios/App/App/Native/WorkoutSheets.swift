@@ -19,7 +19,6 @@ struct WorkoutSessionSheet: View {
 }
 
 private struct WorkoutSheetContent: View {
-    @AppStorage("workoutHealthEnabled") private var healthEnabled = false
     @Environment(GymStore.self) private var store
     var destination: WorkoutSheet
     var close: () -> Void
@@ -39,7 +38,10 @@ private struct WorkoutSheetContent: View {
                 store.mutateActive { $0.note = value.isEmpty ? nil : value }; if store.saveError == nil { close() }
             }
             case .layout: layout
-            case .finish: finish
+            case .finish:
+                if let session = store.active { WorkoutHealthPicker(session: session, finishing: true, close: close) }
+            case .health:
+                if let session = store.active { WorkoutHealthPicker(session: session, close: close) }
             }
         }.navigationBarTitleDisplayMode(.inline)
     }
@@ -67,6 +69,7 @@ private struct WorkoutSheetContent: View {
                 link(.addRoutine, "添加训练日", "calendar.badge.plus", detail: "把另一个训练日并入本次训练")
             }
             Section("本次训练") {
+                link(.health, "上传本次运动", "heart.text.square")
                 link(.rename, "重命名训练", "pencil")
                 link(.layout, "布局", "rectangle.split.1x2", detail: (store.active?.layout ?? store.workoutPreferences.layout).title)
                 link(.note, store.active?.note?.isEmpty == false ? "编辑训练备注" : "添加训练备注", "note.text")
@@ -108,38 +111,6 @@ private struct WorkoutSheetContent: View {
         }.navigationTitle("布局")
     }
 
-    private var finish: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if store.activeDoneCount == 0 {
-                    Text("你还没有勾选任何组。仍要结束训练吗？").foregroundStyle(.secondary)
-                } else if store.activeDoneCount < store.activeSetCount {
-                    Text("还有 \(store.activeSetCount - store.activeDoneCount) 组未完成，仍要结束训练吗？").foregroundStyle(.secondary)
-                } else { Text("已完成 \(store.activeDoneCount) 组").foregroundStyle(.secondary) }
-                Toggle("读取本次健康数据", isOn: $healthEnabled)
-                Text("结束后读取体能训练、心率和活动能量，保存到本次训练；已连接服务器时会随训练同步，用于邮件及训练总结。无数据也会正常保存。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button { Task { await store.finishActive(); if store.active == nil { close() } } } label: {
-                    Label(store.finishingWorkout ? "正在读取并保存…" : "结束并保存", systemImage: "flag.checkered").frame(maxWidth: .infinity, minHeight: 28)
-                }.buttonStyle(.borderedProminent).controlSize(.large).disabled(store.finishingWorkout)
-
-                Button(action: close) {
-                    Text("继续训练").frame(maxWidth: .infinity, minHeight: 28)
-                }.buttonStyle(.bordered).controlSize(.large).disabled(store.finishingWorkout)
-
-                Divider()
-                Button(role: .destructive, action: discard) {
-                    Label("放弃不保存", systemImage: "trash").frame(maxWidth: .infinity, minHeight: 44)
-                }.buttonStyle(.plain).foregroundStyle(.red).disabled(store.finishingWorkout)
-            }
-            .padding(16).frame(maxWidth: 560, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
-            .padding(16).frame(maxWidth: .infinity)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .disabled(store.finishingWorkout)
-        .navigationTitle(store.activeDoneCount == 0 ? "还没有记录" : store.activeDoneCount < store.activeSetCount ? "提前结束？" : "结束训练？")
-    }
 }
 
 struct WorkoutSettingsForm: View {

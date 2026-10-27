@@ -123,6 +123,28 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertNotNil(result.finishedAt)
     }
 
+    func testSkippingHealthClearsPreviouslyAttachedRecord() {
+        var active = session([exercise(done: true)])
+        active.health = WorkoutHealth(status: "available", window_start: 1, window_end: 2, queried_at: 3,
+                                      workout_id: "previous", heart_rate_avg_bpm: 120)
+        let finished = WorkoutLogic.finished(active, at: Date(timeIntervalSince1970: 300), health: nil)
+        XCTAssertNil(finished.health)
+        XCTAssertEqual(active.health?.workout_id, "previous")
+        XCTAssertEqual(finished.id, active.id)
+    }
+
+    func testExplicitHealthChoiceKeepsItsOwnWindowAndSurvivesPersistence() throws {
+        let active = session([exercise(done: true)])
+        let chosen = WorkoutHealth(status: "available", window_start: 500_000, window_end: 600_000,
+                                   queried_at: 700_000, workout_id: "selected-by-user",
+                                   heart_rate_avg_bpm: 123, heart_rate_max_bpm: 160, active_energy_kcal: 250)
+        let finished = WorkoutLogic.finished(active, at: Date(timeIntervalSince1970: 300), health: chosen)
+        let restored = try JSONDecoder().decode(WorkoutSession.self, from: JSONEncoder().encode(finished))
+        XCTAssertEqual(restored.health, chosen)
+        XCTAssertEqual(restored.startedAt, active.startedAt)
+        XCTAssertEqual(restored.id, active.id)
+    }
+
     func testDifferentModesNeverSeedOneAnother() {
         let strength = session([exercise(mode: .reps, done: true)], finished: true)
         XCTAssertNil(WorkoutLogic.previous("2259", mode: .cardio, in: [strength], forProgression: true))

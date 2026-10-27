@@ -46,6 +46,21 @@ test('an unchanged native projection preserves the complete server document exac
   const raw=fixture(), view=project(raw), out=prepare(view,view,raw);
   assert.equal(out.changed,false); assert.deepEqual(out.state,raw);
 });
+
+test('manual health replacement is exact and explicit skip removes the previous record',()=>{
+  const raw=fixture();
+  raw.workouts[0].health={source:'apple_health',status:'available',workout_id:'old',heart_rate_avg_bpm:180};
+  const base=project(raw),local=copy(base);
+  const selected={source:'apple_health',status:'no_data',workout_id:'manual-choice',window_start:123,window_end:456,queried_at:789};
+  local.workouts[0].health=selected;
+  const uploaded=prepare(base,local,raw).state;
+  assert.deepEqual(uploaded.workouts[0].health,selected); // No stale heart rate leaks into replacement.
+  const selectedBase=project(uploaded),skipped=copy(selectedBase);
+  skipped.workouts[0].health=null;
+  const cleared=prepare(selectedBase,skipped,uploaded).state;
+  assert.equal('health' in cleared.workouts[0],false);
+  assert.equal(project(cleared).workouts[0].health,null);
+});
 test('Swift omits optional nil fields and JSON key order without causing writes',()=>{
   const raw=fixture(),base=project(raw);
   const compact=x=>Array.isArray(x)?x.map(compact):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).reverse().filter(k=>x[k]!=null).map(k=>[k,compact(x[k])])):x;

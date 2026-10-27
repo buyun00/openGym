@@ -9,6 +9,7 @@ struct BodyRecordsSection: View {
     @State private var filter: RecordFilter = .all
     @State private var allHistory = false
     @State private var dayLimit = 7
+    @State private var healthSession: WorkoutSession?
 
     init(selectedDate: Date? = nil, visibleMonth: Date = .now, onEntry: @escaping (BodyEntryRequest) -> Void) {
         self.onEntry = onEntry
@@ -90,6 +91,7 @@ struct BodyRecordsSection: View {
         .onChange(of: filter) { _, _ in dayLimit = 7 }
         .onChange(of: allHistory) { _, _ in dayLimit = 7 }
         .onChange(of: selectedDate) { _, _ in dayLimit = 7 }
+        .sheet(item: $healthSession) { WorkoutHealthUploadSheet(session: $0) }
     }
 
     @ViewBuilder private var legend: some View {
@@ -128,6 +130,7 @@ struct BodyRecordsSection: View {
         if filter == .all || filter == .training {
             ForEach(workouts.filter { $0.finishedAt.map { calendar.isDate($0, inSameDayAs: day) } ?? false }) { session in
                 DisclosureGroup {
+                    Button("上传本次运动", systemImage: "heart.text.square") { healthSession = session }
                     ForEach(session.exercises) { exercise in
                         DisclosureGroup {
                             ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
@@ -165,7 +168,7 @@ struct BodyRecordsSection: View {
                                 Text("活动能量 \(formatKg(energy)) kcal").font(.caption).foregroundStyle(.secondary)
                             }
                             if health.heart_rate_avg_bpm == nil && health.active_energy_kcal == nil {
-                                Text("健康数据暂不可用，可在手表同步后重试同步")
+                                Text("健康数据暂不可用，可在手表同步后手动选择补传")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }

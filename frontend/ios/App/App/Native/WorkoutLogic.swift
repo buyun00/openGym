@@ -114,8 +114,10 @@ enum WorkoutLogic {
         if session.restOwner == id { session.restEndsAt = nil; session.restOwner = nil; session.restSetOwner = nil }
     }
 
-    static func finished(_ active: WorkoutSession, at date: Date) -> WorkoutSession {
+    static func finished(_ active: WorkoutSession, at date: Date, health: WorkoutHealth? = nil) -> WorkoutSession {
         var result = active
+        // Only this finish action's explicit selection is retained. Skip always clears prior health.
+        result.health = health
         result.finishedAt = date
         result.exercises.removeAll { !$0.sets.contains(where: \.done) }
         result.restEndsAt = nil

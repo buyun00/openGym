@@ -107,7 +107,7 @@ struct WorkoutView: View {
 }
 
 enum WorkoutSheet: Identifiable, Equatable {
-    case menu, settings, addExercise, addRoutine, rename, layout, note, finish
+    case menu, settings, addExercise, addRoutine, rename, layout, note, finish, health
     var id: String { String(describing: self) }
 }
 
@@ -135,6 +135,9 @@ struct ActiveWorkoutView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if let session = store.active {
+                            Button("上传本次运动", systemImage: "heart.text.square") { sheet = .health }
+                                .buttonStyle(.borderedProminent)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             if session.exercises.isEmpty {
                                 ContentUnavailableView("添加第一个动作", systemImage: "figure.strengthtraining.traditional", description: Text("从动作库选择，或把一个训练日并入本次训练。"))
                             } else if layout == .cards, let exercise = selected {
@@ -179,7 +182,7 @@ struct ActiveWorkoutView: View {
             .overlay { if flashing { Color.green.opacity(0.15).ignoresSafeArea().allowsHitTesting(false) } }
             .sheet(item: $sheet, onDismiss: sheetDidDismiss) { destination in
                 WorkoutSessionSheet(destination: destination, requestDiscard: requestDiscard)
-                    .presentationDetents(destination == .finish && !typeSize.isAccessibilitySize ? [.height(400), .large] : [.large])
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
             .alert("记录未保存", isPresented: Binding(get: { store.saveError != nil && sheet == nil && discardSessionId == nil && !confirmingDiscard }, set: { if !$0 { store.saveError = nil } })) {

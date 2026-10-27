@@ -8,56 +8,41 @@ final class WorkoutHealthReader {
     private let heart = HKQuantityType(.heartRate)
     private let energy = HKQuantityType(.activeEnergyBurned)
 
-    func read(start: Date, end: Date, requestPermission: Bool) async -> WorkoutHealth {
-        var result = WorkoutHealth(status: "no_data", window_start: start.timeIntervalSince1970 * 1000,
+    /// Listing/previewing never attaches data. Only an explicit choice can be saved.
+    func recent(around date: Date) async throws -> [HKWorkout] {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw NSError(domain: "OpenGym.HealthKit", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "此设备无法读取健康数据"])
+        }
+        try await store.requestAuthorization(toShare: [], read: [HKObjectType.workoutType(), heart, energy])
+        let end = min(Date(), date.addingTimeInterval(86400))
+        return try await workouts(start: date.addingTimeInterval(-7 * 86400), end: end)
+    }
+
+    /// Read exactly the user's selected workout; never search for a replacement workout.
+    func read(_ workout: HKWorkout) async throws -> WorkoutHealth {
+        let start = workout.startDate, end = workout.endDate
+        let window = HKQuery.predicateForSamples(withStart: start, end: end,
+                                                 options: [.strictStartDate, .strictEndDate])
+        let associated = NSCompoundPredicate(andPredicateWithSubpredicates: [window,
+            HKQuery.predicateForObjects(from: workout)])
+        var hr = try await statistics(heart, predicate: associated, options: [.discreteAverage, .discreteMax])
+        if hr?.averageQuantity() == nil {
+            let source = NSCompoundPredicate(andPredicateWithSubpredicates: [window,
+                HKQuery.predicateForObjects(from: workout.sourceRevision.source)])
+            hr = try await statistics(heart, predicate: source, options: [.discreteAverage, .discreteMax])
+        }
+        let calories = try await statistics(energy, predicate: associated, options: .cumulativeSum)
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        var result = WorkoutHealth(status: "available", window_start: start.timeIntervalSince1970 * 1000,
                                    window_end: end.timeIntervalSince1970 * 1000,
                                    queried_at: Date().timeIntervalSince1970 * 1000)
-        guard end > start, HKHealthStore.isHealthDataAvailable() else {
-            result.status = "unavailable"; return result
-        }
-        do {
-            if requestPermission {
-                try await store.requestAuthorization(toShare: [], read: [HKObjectType.workoutType(), heart, energy])
-            }
-            let window = HKQuery.predicateForSamples(withStart: start, end: end,
-                                                     options: [.strictStartDate, .strictEndDate])
-            // A nearby workout must cover >=80% of BOTH intervals; adjacent sessions must not match.
-            let candidates = try await workouts(start: start, end: end)
-            let duration = end.timeIntervalSince(start)
-            let matched = candidates.filter {
-                let overlap = min(end, $0.endDate).timeIntervalSince(max(start, $0.startDate))
-                return overlap / duration >= 0.8 && overlap / max(1, $0.endDate.timeIntervalSince($0.startDate)) >= 0.8
-            }.max { a, b in
-                min(end, a.endDate).timeIntervalSince(max(start, a.startDate)) <
-                min(end, b.endDate).timeIntervalSince(max(start, b.startDate))
-            }
-            result.workout_id = matched?.uuid.uuidString
-            // Heart samples can exist without a saved Apple Watch workout.
-            var heartPredicate = window
-            if let matched {
-                heartPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [window,
-                    HKQuery.predicateForObjects(from: matched.sourceRevision.source)])
-            }
-            let bpm = HKUnit.count().unitDivided(by: .minute())
-            var hr = try await statistics(heart, predicate: heartPredicate, options: [.discreteAverage, .discreteMax])
-            // Imported workouts can have a different source from the watch/chest sensor.
-            if matched != nil && hr?.averageQuantity() == nil {
-                hr = try await statistics(heart, predicate: window, options: [.discreteAverage, .discreteMax])
-            }
-            result.heart_rate_avg_bpm = hr?.averageQuantity()?.doubleValue(for: bpm)
-            result.heart_rate_max_bpm = hr?.maximumQuantity()?.doubleValue(for: bpm)
-            if let matched {
-                let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [window,
-                    HKQuery.predicateForObjects(from: matched)])
-                let calories = try await statistics(energy, predicate: predicate, options: .cumulativeSum)
-                result.active_energy_kcal = calories?.sumQuantity()?.doubleValue(for: .kilocalorie())
-            }
-            result.status = result.heart_rate_avg_bpm != nil || result.active_energy_kcal != nil || matched != nil ? "available" : "no_data"
-        } catch {
-            // Read denial is deliberately indistinguishable from no samples in HealthKit.
-            // Preserve partial values if a later query fails; never substitute zero.
-            result.status = "query_failed"
-        }
+        result.workout_id = workout.uuid.uuidString
+        result.heart_rate_avg_bpm = hr?.averageQuantity()?.doubleValue(for: bpm)
+        result.heart_rate_max_bpm = hr?.maximumQuantity()?.doubleValue(for: bpm)
+        result.active_energy_kcal = calories?.sumQuantity()?.doubleValue(for: .kilocalorie())
+            ?? workout.statistics(for: energy)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+        if result.heart_rate_avg_bpm == nil && result.active_energy_kcal == nil { result.status = "no_data" }
         return result
     }
 
@@ -66,7 +51,7 @@ final class WorkoutHealthReader {
             let gate = HealthQueryGate(continuation)
             let query = HKSampleQuery(sampleType: .workoutType(),
                                       predicate: HKQuery.predicateForSamples(withStart: start, end: end),
-                                      limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
+                                      limit: 30, sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]) { _, samples, error in
                 if let error { gate.resolve(.failure(error)) }
                 else { gate.resolve(.success(samples as? [HKWorkout] ?? [])) }
             }

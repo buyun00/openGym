@@ -13,8 +13,6 @@ final class GymStore {
     var weighIns: [WeighIn] = []
     var bodyMeasurements: [BodyMeasurement] = []
     var saveError: String?
-    var finishingWorkout = false
-    private let healthReader = WorkoutHealthReader()
     var targetKg: Double?
     var restSeconds: Int = 90
     var ownedEquipment: [String] = []
@@ -229,48 +227,44 @@ final class GymStore {
         updateSet(exercise: exerciseId, set: setId) { $0.reps = min(100, max(0, reps)) }
     }
 
-    func finishActive() async {
-        guard let session = active, !finishingWorkout else { return }
-        finishingWorkout = true
-        defer { finishingWorkout = false }
-        let endedAt = Date()
-        let health = UserDefaults.standard.bool(forKey: "workoutHealthEnabled")
-            ? await healthReader.read(start: session.startedAt, end: endedAt, requestPermission: true) : nil
-        // Authorization can suspend while the user navigates or discards the session.
-        guard let current = active, current.id == session.id else { return }
+    /// health == nil is an explicit skip, including when a manual attachment already exists.
+    @discardableResult
+    func finishActive(id: UUID, health: WorkoutHealth?, at endedAt: Date, expectedHealth: WorkoutHealth?) -> Bool {
+        guard let current = active, current.id == id else {
+            saveError = "本次训练已关闭，请从历史记录选择要上传的训练。"; return false
+        }
+        guard current.health == expectedHealth else {
+            saveError = "健康数据已更改，请关闭选择器后重新选择。"; return false
+        }
         let previousWorkouts = workouts
-        var finished = WorkoutLogic.finished(current, at: endedAt)
-        finished.health = health
+        let finished = WorkoutLogic.finished(current, at: max(current.startedAt, endedAt), health: health)
         workouts.append(finished)
         active = nil
-        if save() { restEndsAt = nil; refreshWorkoutAlerts(); tab = .today }
-        else { workouts = previousWorkouts; active = current }
+        if save() { restEndsAt = nil; refreshWorkoutAlerts(); tab = .today; return true }
+        workouts = previousWorkouts; active = current
+        return false
     }
 
-    /// Retry recent missing/partial samples before sync, after Watch-to-phone delivery.
-    /// Never prompt from background sync and never touch the Shortcut body-data path.
-    func refreshWorkoutHealth() async {
-        guard UserDefaults.standard.bool(forKey: "workoutHealthEnabled") else { return }
-        let pending = workouts.filter {
-            guard let end = $0.finishedAt, $0.health != nil else { return false }
-            return end > Date().addingTimeInterval(-86400) &&
-                ($0.health?.heart_rate_avg_bpm == nil || $0.health?.active_energy_kcal == nil)
-        }.suffix(5)
-        for session in pending {
-            guard let end = session.finishedAt else { continue }
-            let result = await healthReader.read(start: session.startedAt, end: end, requestPermission: false)
-            guard let index = workouts.firstIndex(where: { $0.id == session.id }),
-                  var health = workouts[index].health else { continue }
-            let old = health
-            health.heart_rate_avg_bpm = result.heart_rate_avg_bpm ?? health.heart_rate_avg_bpm
-            health.heart_rate_max_bpm = result.heart_rate_max_bpm ?? health.heart_rate_max_bpm
-            health.active_energy_kcal = result.active_energy_kcal ?? health.active_energy_kcal
-            health.workout_id = result.workout_id ?? health.workout_id
-            guard health != old else { continue }
-            health.status = result.status; health.queried_at = result.queried_at
-            workouts[index].health = health
-            if !save() { workouts[index].health = old }
+    @discardableResult
+    func attachWorkoutHealth(_ health: WorkoutHealth, to id: UUID, expectedHealth: WorkoutHealth?) -> Bool {
+        if let current = active, current.id == id {
+            guard current.health == expectedHealth else {
+                saveError = "健康数据已更改，请关闭选择器后重新选择。"; return false
+            }
+            active?.health = health
+            if save() { return true }
+            active = current; return false
         }
+        guard let index = workouts.firstIndex(where: { $0.id == id && $0.finishedAt != nil }) else {
+            saveError = "这次训练已不存在，未保存健康数据。"; return false
+        }
+        let old = workouts[index].health
+        guard old == expectedHealth else {
+            saveError = "健康数据已更改，请关闭选择器后重新选择。"; return false
+        }
+        workouts[index].health = health
+        if save() { return true }
+        workouts[index].health = old; return false
     }
 
     func discardActive() {

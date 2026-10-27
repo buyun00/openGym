@@ -158,7 +158,6 @@ final class GymCloudSync {
 
     private func exchange(store: GymStore) async throws {
         if let storageError { throw GymSyncError(message: storageError) }
-        await store.refreshWorkoutHealth()
         guard var auth = connection else { return }
         let me = try await request(base: auth.base, path: "/api/me", token: auth.token)
         guard let user = me["user"] as? [String: Any], user["id"] as? String == auth.userID else {

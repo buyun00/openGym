@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>NSHealthShareUsageDescription</key>
-    <string>读取本次训练时间内的体能训练、心率和活动能量，保存到训练记录，并随已配置的服务器同步用于邮件和训练总结。</string>
+    <string>读取你手动选择的体能训练、心率和活动能量，保存到训练记录，并随已配置的服务器同步用于邮件和训练总结。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

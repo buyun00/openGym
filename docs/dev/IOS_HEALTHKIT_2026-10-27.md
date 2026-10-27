@@ -1,5 +1,7 @@
 # iOS 训练结束后的 HealthKit 结果
 
+> 更新：以下自动匹配和同步补读描述已被后续手选方案替代。当前流程见 [HealthKit 手动选择上传](IOS_HEALTHKIT_MANUAL_UPLOAD_2026-10-27.md)：没有自动匹配/自动挂载，跳过会清空本次 health。
+
 ## 本地提交边界
 
 iOS HealthKit 接入已独立提交为 2669b974；health 字段组装 helper、专项测试及 Docker COPY 已提交为 69ab7f17。
