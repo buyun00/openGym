@@ -3,41 +3,29 @@ import SwiftUI
 
 struct BodyRecordsSection: View {
     @Environment(GymStore.self) private var store
-    var onEntry: (BodyEntryRequest) -> Void
     @State private var selectedDate: Date?
     @State private var visibleMonth = Date.now
-    @State private var filter: RecordFilter = .all
     @State private var allHistory = false
     @State private var dayLimit = 7
     @State private var healthSession: WorkoutSession?
 
-    init(selectedDate: Date? = nil, visibleMonth: Date = .now, onEntry: @escaping (BodyEntryRequest) -> Void) {
-        self.onEntry = onEntry
+    init(selectedDate: Date? = nil, visibleMonth: Date = .now) {
         _selectedDate = State(initialValue: selectedDate)
         _visibleMonth = State(initialValue: selectedDate ?? visibleMonth)
     }
 
-    private enum RecordFilter: String, CaseIterable, Identifiable {
-        case all = "全部", training = "训练", weight = "称重", measurement = "围度"
-        var id: String { rawValue }
-    }
     private var workouts: [WorkoutSession] { BodyAnalytics.workouts(store.workouts, range: .all, now: .now) }
-    private var weights: [WeighIn] { BodyAnalytics.weights(store.weighIns, range: .all, now: .now) }
     private var calendar: Calendar { .current }
     private var decorations: [Date: Int] {
         var result: [Date: Int] = [:]
         for session in workouts {
             if let date = session.finishedAt { result[calendar.startOfDay(for: date), default: 0] |= 1 }
         }
-        for weight in weights { result[calendar.startOfDay(for: weight.date), default: 0] |= 2 }
-        for measurement in store.bodyMeasurements { result[calendar.startOfDay(for: measurement.date), default: 0] |= 4 }
         return result
     }
     private var days: [Date] {
         BodyAnalytics.recordDays(
-            workouts: filter == .all || filter == .training ? workouts : [],
-            weights: filter == .all || filter == .weight ? weights : [],
-            measurements: filter == .all || filter == .measurement ? store.bodyMeasurements : []
+            workouts: workouts, weights: [], measurements: []
         ).filter { date in
             if let selectedDate { return calendar.isDate(date, inSameDayAs: selectedDate) }
             return allHistory || calendar.isDate(date, equalTo: visibleMonth, toGranularity: .month)
@@ -61,9 +49,6 @@ struct BodyRecordsSection: View {
                         .foregroundStyle(.green)
                 }.frame(height: 160)
             }
-            Picker("记录类型", selection: $filter) {
-                ForEach(RecordFilter.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.menu)
             if let selectedDate {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(selectedDate, format: .dateTime.year().month().day()).font(.subheadline)
@@ -73,7 +58,7 @@ struct BodyRecordsSection: View {
                 Toggle("查看全部历史", isOn: $allHistory)
             }
             if days.isEmpty {
-                ContentUnavailableView("没有符合条件的记录", systemImage: "calendar", description: Text("选择其他日期或记录类型，或新增一条记录。"))
+                ContentUnavailableView("没有训练记录", systemImage: "dumbbell", description: Text("选择其他日期或查看全部训练历史。"))
                 if !allHistory {
                     Button("查看全部历史") { selectedDate = nil; allHistory = true }
                 }
@@ -88,7 +73,6 @@ struct BodyRecordsSection: View {
             Text("点选日期筛选当天记录；展开训练可查看动作与每组数据，也可补录强度。")
         }
         .onChange(of: visibleMonth) { _, _ in dayLimit = 7; allHistory = false }
-        .onChange(of: filter) { _, _ in dayLimit = 7 }
         .onChange(of: allHistory) { _, _ in dayLimit = 7 }
         .onChange(of: selectedDate) { _, _ in dayLimit = 7 }
         .sheet(item: $healthSession) { WorkoutHealthUploadSheet(session: $0) }
@@ -96,86 +80,56 @@ struct BodyRecordsSection: View {
 
     @ViewBuilder private var legend: some View {
         Label("训练", systemImage: "circle.fill").foregroundStyle(.green)
-        Label("称重", systemImage: "circle.fill").foregroundStyle(.blue)
-        Label("围度", systemImage: "circle.fill").foregroundStyle(.orange)
-        Label("多项", systemImage: "circle.fill").foregroundStyle(.purple)
     }
 
     @ViewBuilder private func dayRecords(_ day: Date) -> some View {
-        if filter == .all || filter == .weight {
-            ForEach(weights.filter { calendar.isDate($0.date, inSameDayAs: day) }) { weight in
-                Button { onEntry(.weight(weight)) } label: {
-                    LabeledContent {
-                        Text("\(formatKg(weight.kilograms)) kg").foregroundStyle(.primary)
-                    } label: { Label("体重", systemImage: "scalemass").foregroundStyle(.blue) }
-                }
-                .swipeActions { Button("删除", role: .destructive) { store.deleteWeighIn(weight.id) } }
-            }
-        }
-        if filter == .all || filter == .measurement {
-            ForEach(store.bodyMeasurements.filter { calendar.isDate($0.date, inSameDayAs: day) }) { measurement in
-                DisclosureGroup {
-                    ForEach(BodyMeasurement.fields, id: \.self) { field in
-                        if let value = measurement.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
-                    }
-                    ForEach(measurement.centimeters.keys.filter { !BodyMeasurement.fields.contains($0) }.sorted(), id: \.self) { field in
-                        if let value = measurement.centimeters[field] { LabeledContent(field, value: "\(formatKg(value)) cm") }
-                    }
-                    if let fat = measurement.bodyFatPercent { LabeledContent("体脂率", value: "\(formatKg(fat))%") }
-                    Button("编辑围度") { onEntry(.measurement(measurement)) }
-                } label: { Label("身体围度 · \(measurement.centimeters.count)项", systemImage: "ruler") }
-                .swipeActions { Button("删除", role: .destructive) { store.deleteMeasurement(measurement.id) } }
-            }
-        }
-        if filter == .all || filter == .training {
-            ForEach(workouts.filter { $0.finishedAt.map { calendar.isDate($0, inSameDayAs: day) } ?? false }) { session in
-                DisclosureGroup {
-                    Button("上传本次运动", systemImage: "heart.text.square") { healthSession = session }
-                    ForEach(session.exercises) { exercise in
-                        DisclosureGroup {
-                            ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    LabeledContent("第\(index + 1)组", value: setDescription(set))
-                                    if set.done {
-                                        Picker("强度 RIR", selection: Binding<Int?>(
-                                            get: { store.workouts.first { $0.id == session.id }?.exercises.first { $0.id == exercise.id }?.sets.first { $0.id == set.id }?.rir },
-                                            set: { store.setRIR(workout: session.id, exercise: exercise.id, set: set.id, value: $0) }
-                                        )) {
-                                            Text("未记录").tag(Int?.none)
-                                            ForEach(0...10, id: \.self) { value in Text("还能做 \(value) 次").tag(Optional(value)) }
-                                        }.pickerStyle(.menu)
-                                    }
-                                }.padding(.vertical, 4)
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(exercise.name)
-                                Text("已完成 \(exercise.sets.filter(\.done).count) / \(exercise.sets.count) 组")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
+        ForEach(workouts.filter { $0.finishedAt.map { calendar.isDate($0, inSameDayAs: day) } ?? false }) { session in
+            DisclosureGroup {
+                Button("上传本次运动", systemImage: "heart.text.square") { healthSession = session }
+                ForEach(session.exercises) { exercise in
+                    DisclosureGroup {
+                        ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                            VStack(alignment: .leading, spacing: 6) {
+                                LabeledContent("第\(index + 1)组", value: setDescription(set))
+                                if set.done {
+                                    Picker("强度 RIR", selection: Binding<Int?>(
+                                        get: { store.workouts.first { $0.id == session.id }?.exercises.first { $0.id == exercise.id }?.sets.first { $0.id == set.id }?.rir },
+                                        set: { store.setRIR(workout: session.id, exercise: exercise.id, set: set.id, value: $0) }
+                                    )) {
+                                        Text("未记录").tag(Int?.none)
+                                        ForEach(0...10, id: \.self) { value in Text("还能做 \(value) 次").tag(Optional(value)) }
+                                    }.pickerStyle(.menu)
+                                }
+                            }.padding(.vertical, 4)
                         }
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label(session.name, systemImage: "dumbbell")
-                        Text(workoutDescription(session)).font(.caption).foregroundStyle(.secondary)
-                        if let health = session.health {
-                            if let average = health.heart_rate_avg_bpm {
-                                Text("平均心率 \(formatKg(average)) bpm · 峰值 \(health.heart_rate_max_bpm.map(formatKg) ?? "—") bpm")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            if let energy = health.active_energy_kcal {
-                                Text("活动能量 \(formatKg(energy)) kcal").font(.caption).foregroundStyle(.secondary)
-                            }
-                            if health.heart_rate_avg_bpm == nil && health.active_energy_kcal == nil {
-                                Text("健康数据暂不可用，可在手表同步后手动选择补传")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(exercise.name)
+                            Text("已完成 \(exercise.sets.filter(\.done).count) / \(exercise.sets.count) 组")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
-                .swipeActions { Button("删除", role: .destructive) { store.deleteWorkout(session.id) } }
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(session.name, systemImage: "dumbbell")
+                    Text(workoutDescription(session)).font(.caption).foregroundStyle(.secondary)
+                    if let health = session.health {
+                        if let average = health.heart_rate_avg_bpm {
+                            Text("平均心率 \(formatKg(average)) bpm · 峰值 \(health.heart_rate_max_bpm.map(formatKg) ?? "—") bpm")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let energy = health.active_energy_kcal {
+                            Text("活动能量 \(formatKg(energy)) kcal").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if health.heart_rate_avg_bpm == nil && health.active_energy_kcal == nil {
+                            Text("健康数据暂不可用，可在手表同步后手动选择补传")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
+            .swipeActions { Button("删除", role: .destructive) { store.deleteWorkout(session.id) } }
         }
     }
 

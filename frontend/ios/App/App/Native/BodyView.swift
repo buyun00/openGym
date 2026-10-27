@@ -263,9 +263,9 @@ struct BodyView: View {
             $0.finishedAt.map { Calendar.current.isDate($0, equalTo: visibleMonth, toGranularity: .month) } ?? false
         }.count
         let summary = BodyAnalytics.summary(store.workouts, now: .now)
-        let recentDays = BodyAnalytics.recordDays(workouts: allWorkouts, weights: allWeights, measurements: store.bodyMeasurements)
+        let recentDays = BodyAnalytics.recordDays(workouts: allWorkouts, weights: [], measurements: [])
         return VStack(alignment: .leading, spacing: compact ? 10 : 16) {
-            heading(.records, subtitle: "训练日期与全部身体记录")
+            heading(.records, subtitle: "训练日期与锻炼内容")
             Text("\(visibleMonth.formatted(.dateTime.year().month())) · \(monthly) 次训练")
                 .font(.headline).fixedSize(horizontal: false, vertical: true)
             Text("累计 \(allWorkouts.count) 次 · 本周 \(summary.week) 次 · 连续 \(summary.consecutiveWeeks) 周")
@@ -289,10 +289,10 @@ struct BodyView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }.buttonStyle(.bordered)
-                    .accessibilityHint("打开这一天的训练、称重与围度明细")
+                    .accessibilityHint("打开这一天的锻炼明细")
                 }
             }
-            detailsButton(.records, title: "日历与全部记录")
+            detailsButton(.records, title: "日历与全部训练记录")
         }.fixedSize(horizontal: false, vertical: true)
     }
 
@@ -352,7 +352,7 @@ private struct BodyDetailSheet: View {
                     Section("动作力量趋势") { exerciseChart }
                 case .records:
                     trainingSummary
-                    BodyRecordsSection(selectedDate: recordDate, visibleMonth: recordMonth) { entry = $0 }
+                    BodyRecordsSection(selectedDate: recordDate, visibleMonth: recordMonth)
                 }
             }
             .listStyle(.insetGrouped)

@@ -126,7 +126,9 @@ if options.paging:
         "detail_edits_and_errors_remain_native": all(token in detail for token in
             ["List {", ".sheet(item: $entry)", 'Button("完成")', 'get: { store.saveError != nil && entry == nil }',
              "store.deleteWeighIn", "store.setTarget", "exerciseChart", "measurementSection"])
-            and all(token in records for token in ["store.setRIR", "store.deleteWorkout", "store.deleteMeasurement", "onEntry(.weight", "onEntry(.measurement"]),
+            and all(token in records for token in ["store.setRIR", "store.deleteWorkout", "WorkoutHealthUploadSheet"]),
+        "record_list_only_contains_workouts": "workouts: workouts, weights: [], measurements: []" in records
+            and all(token not in records for token in ["RecordFilter", "store.bodyMeasurements", "store.weighIns", "onEntry", 'Picker("记录类型"']),
     })
 report = {
     "scope": "Windows static syntax, project and source/asset checks ONLY; NOT Swift typechecking, XCTest execution, Xcode build or iOS runtime",
