@@ -1,12 +1,14 @@
 # iOS 训练结束后的 HealthKit 结果
 
-## 本次本地提交边界
+## 本地提交边界
 
-本次提交仅含 iOS HealthKit 接入、同步字段、健康指标显示、工程权限、同步往返测试及本文。混合文件按改动拆分，未包含 UI refinement 和个人连接配置。下文 API/邮件验证描述的是完整工作区的实现，不表示这些服务端改动已包含在本提交。
+iOS HealthKit 接入已独立提交为 2669b974；health 字段组装 helper、专项测试及 Docker COPY 已提交为 69ab7f17。
 
-`api/workout-sync-events.js` 和 `api/test/workout-sync-events.test.js` 仍是另一批暂存但尚未提交的新文件；无法只提交其中 health 几行而不引入整个未提交事件模块。后续本地提交已将 health 组装提取为独立的 `api/workout-health.js`，并提交直接依赖它的 `api/test/workout-health.test.js`，覆盖数值校验、缺失值及邮件/Webhook envelope 字段。Dockerfile 仅纳入新 helper 的 COPY 项，其余 API 模块 COPY 改动继续留在原暂存区。
+第三次本地提交纳入完整的最小完成事件链路：`workout-sync-events.js`（含 `completedHealthFields` 接线）、`server.js` 中 PUT 完成事件触发及与 POST 的去重、Docker COPY、集成测试，以及删除账户时清理事件去重记录及其测试。两个事件文件此前在 HEAD 中不存在，因此必要的完成 payload 与去重基础也纳入，而不是只保存无法独立运行的两行 import/spread。
 
-完整工作区的 `completedPayload` 已调用 `...completedHealthFields(w)`，对应的真实 PUT → 邮件/Webhook 集成断言也保留。这两个事件模块文件及其接线尚未提交，待它们自身的基础改动提交后再收尾。仅检出当前提交尚不会启用生产 PUT 完成事件扩展；没有 push 或部署。`WorkoutView.swift` 与 `check-native-workout.py` 的未提交差异属于 UI 导航/样式及对应静态检查，不属于 HealthKit。
+实际待提交快照已在独立临时目录执行 13 项测试，全部通过，包括 PUT → SMTP 邮件/Webhook 的 heart rate/energy 断言、迟到更新不重复发送、跨 POST/PUT 去重及删除账户清理。快照使用既有普通 Bearer/Cookie 会话，不依赖未提交的个人 iOS 凭据模块。
+
+保留未提交：`server.js` 的 personalSession 授权及 /api/me 个人模式、`ios-personal.js` 与相关配置/测试、Docker 中 ios-personal COPY，以及完成事件集成测试的个人凭据专用变体。`WorkoutView.swift` 与 `check-native-workout.py` 的剩余差异是 UI 导航/样式及相应静态检查，不属于 HealthKit；body/water/home 等改动未纳入。没有 push 或部署 H3。
 
 ## 实现
 
@@ -70,6 +72,6 @@ swift test --package-path frontend/ios
 - 8 项身体 hook 解析/HTTP 请求体回归通过。
 - 全部 Native Swift 语法解析通过，新增 Sources 引用、Debug/Release entitlement 与 plist 检查通过。这不是 Swift 类型检查、Xcode 编译或真机验收。
 - 既有事件去重测试的 Unix 0600 断言仅在非 Windows 上执行；Windows ACL 不表示相同的 mode 位，其他去重断言照常执行。
-- iOS HealthKit 改动单独本地提交，未部署 H3。服务端需要更新 `api/workout-sync-events.js` 的 payload 组装，才会在生产完成邮件中出现 health；现有共享工作区中该模块、`server.js`、Dockerfile 和个人同步授权改动也是前置依赖，不应盲目整仓部署。
+- iOS HealthKit 改动单独本地提交，未部署 H3。生产完成邮件生效需发布本次 API 链路；个人安装包若使用 ios: 凭据，还依赖另外保留的个人同步授权改动。不能把本地测试通过当作生产已部署，也不应盲目整仓部署。
 
 真机需检查：首次三项授权、拒绝权限也能保存、真实训练窗的心率/能量与健康 App 对照、无 Workout 但有心率、Watch 晚到补读、离线保存后同步、同一训练不重复邮件。未执行这些验收。

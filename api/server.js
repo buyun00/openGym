@@ -37,6 +37,7 @@ import { stampPut } from './sync-stamps.js';
 import * as bodyHook from './body-hook.js';
 import * as wh from './workout-webhook.js';
 import * as wmail from './workout-email.js';
+import { claimClientEvent, claimEvent, completedEventKey, completedPayload, eventsPath, newlyCompletedWorkouts } from './workout-sync-events.js';
 import * as equip from './equipment.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
@@ -1949,6 +1950,28 @@ function saveEquipPhoto(data) {
   return p.name;
 }
 const equipErr = (res, e) => { if (e && e.status) return json(res, e.status, { error: e.message }); throw e; };
+
+// Mail and webhook for one event. Callers have already decided it should go out.
+function deliverWorkoutEvent(user, type, data) {
+  const ev = wh.envelope(type, user, data && typeof data === 'object' ? data : {});
+  if (wh.config().url) wh.deliver(ev).catch(e => console.error('[webhook]', e));
+  if (wmail.emailConfig().to) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
+  return ev;
+}
+// A completed workout that was not on disk before this PUT. The personal iOS app syncs only
+// the document, so this is the path that reaches WORKOUT_EMAIL_TO. Claiming the workout id
+// first means the web client's POST /api/events for the same id does not send a second copy.
+// A profile that already holds its history does not mail it again. A write that introduces
+// every past session at once (an empty file, a restore) mails each of those ids once.
+function noteSyncedWorkouts(user, prev, next) {
+  if (!wh.config().url && !wmail.emailConfig().to) return;
+  for (const w of newlyCompletedWorkouts(prev, next)) {
+    const key = completedEventKey(w.id);
+    if (!key || !claimEvent(DATA, user.id, key)) continue;
+    console.log(`[events] workout.completed ${w.id} via sync`);
+    deliverWorkoutEvent(user, 'workout.completed', completedPayload(w, next));
+  }
+}
 const routes = {
   // 503 rather than a flag in a 200: the container healthcheck is `wget --spider`, which reads
   // the status and nothing else, and an instance that cannot write its data directory is exactly
@@ -2332,6 +2355,8 @@ const routes = {
     if (MEDIA_ON) {
       try { MEDIA.noteState(user.id, body.state); } catch (e) { console.error('media noteState', e); }
     }
+    // Bookkeeping only: the document is already saved. A mail failure must not fail the sync.
+    try { noteSyncedWorkouts(user, cur, body.state); } catch (e) { console.error('[events] sync', e); }
     json(res, 200, { ok: true, ts: body.state._ts || null, rev: curRev + 1, wid: body.state._wid });
   },
 
@@ -2488,9 +2513,10 @@ const routes = {
     if (!wh.EVENT_TYPES.has(body.type) || body.type === 'test') return json(res, 400, { error: 'unknown event type' });
     const hookOn = !!wh.config().url, mailOn = !!wmail.emailConfig().to;
     if (!hookOn && !mailOn) return json(res, 202, { ok: true, delivered: false, reason: 'disabled' });
-    const ev = wh.envelope(body.type, user, body.data && typeof body.data === 'object' ? body.data : {});
-    if (hookOn) wh.deliver(ev).catch(e => console.error('[webhook]', e));
-    if (mailOn) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
+    const data = body.data && typeof body.data === 'object' ? body.data : {};
+    // Shared with noteSyncedWorkouts: the sync write and this post are one notification.
+    if (!claimClientEvent(DATA, user.id, body.type, data)) return json(res, 202, { ok: true, duplicate: true });
+    const ev = deliverWorkoutEvent(user, body.type, data);
     json(res, 202, { ok: true, id: ev.id });
   },
   // Admin session, or Bearer WORKOUT_WEBHOOK_SECRET: sends a test event and waits for the result.
@@ -2704,6 +2730,7 @@ const routes = {
     presence.delete(u.id);
     // The training history and any Coach credential of theirs, both outside db.json.
     try { fs.unlinkSync(stateFile(u.id)); } catch { /* already gone */ }
+    try { fs.unlinkSync(eventsPath(DATA, u.id)); } catch { /* no workout mail record */ }
     try { coachConfig.clearProfileAuth(u.id); } catch { /* nothing stored */ }
     // Their photos and videos — the one place a profile's folder under uploads/ is removed.
     try { MEDIA.removeUser(u.id); } catch (e) { console.error('media: could not remove uploads of', u.id, e.message); }
