@@ -34,6 +34,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.rootViewController = UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle))
         self.window = window
         window.makeKeyAndVisible()
+        if let url = connectionOptions.urlContexts.first?.url { _ = GymRoutes.shared.receive(url) }
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) { lifecycle.phase = .active }
@@ -48,6 +49,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         guard let url = URLContexts.first?.url else { return }
+        if GymRoutes.shared.receive(url) { return }
         _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: url, options: [:])
     }
 

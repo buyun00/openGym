@@ -6,6 +6,7 @@ struct GymConnectionView: View {
 
     var body: some View {
         Form {
+            BodySyncSettings()
             Section("我的数据") {
                 Text("App 自动连接 H3，与网页共用你的计划、训练、体重、围度和器械。修改会自动同步，离线记录保存在此设备。")
                 Text("首次启动会先下载网页记录，本机原有数据另存备份。正在进行的训练留在当前设备。")

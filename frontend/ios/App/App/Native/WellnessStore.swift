@@ -25,12 +25,15 @@ final class WellnessStore {
     func refreshTime() {
         let previous = WellnessDay.key(now)
         now = Date()
-        if previous != WellnessDay.key(now) { lastAddedWaterID = nil; reconcileReminders() }
+        if previous != WellnessDay.key(now) {
+            lastAddedWaterID = nil; reconcileReminders(); GymWidgets.water(state)
+        }
     }
 
     func activate() {
         refreshTime()
         reconcileReminders()
+        GymWidgets.water(state)
     }
 
     @discardableResult
@@ -86,6 +89,7 @@ final class WellnessStore {
         do {
             try WellnessPersistence.write(next, to: fileURL)
             state = next // Publish only after a successful disk write.
+            GymWidgets.water(state)
             errorMessage = nil
             reconcileReminders()
             return true

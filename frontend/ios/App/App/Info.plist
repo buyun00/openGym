@@ -2,8 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSSupportsLiveActivities</key><true/>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>org.lin0.opengym</string>
+        <key>CFBundleURLSchemes</key><array><string>opengym</string></array>
+    </dict></array>
     <key>NSHealthShareUsageDescription</key>
-    <string>读取你手动选择的体能训练、心率和活动能量，保存到训练记录，并随已配置的服务器同步用于邮件和训练总结。</string>
+    <string>读取你手动选择的体能训练、心率和活动能量；通过身体同步入口读取当天体重、体脂率和去脂体重，并上传到你配置的服务器。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

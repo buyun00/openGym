@@ -22,6 +22,7 @@ final class GymStore {
     var restEndsAt: Date?
     var workoutPreferences = WorkoutPreferences()
     private let workoutAlerts = WorkoutRestAlerts()
+    let liveActivity = TrainingLiveActivity()
 
     struct Snapshot: Codable {
         var routines: [Routine] = []
@@ -38,7 +39,7 @@ final class GymStore {
         var gymEquipment: [GymEquipmentRecord]?
     }
 
-    init() { load(); cloud.restore(into: self); refreshWorkoutAlerts() }
+    init() { load(); cloud.restore(into: self); refreshWorkoutAlerts(); refreshSystemSurfaces() }
 
     func refreshWorkoutAlerts() {
         workoutAlerts.update(end: restEndsAt, preferences: workoutPreferences) { [weak self] in self?.clearRest() }
@@ -180,6 +181,7 @@ final class GymStore {
               let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }),
               let si = session.exercises[ei].sets.firstIndex(where: { $0.id == setId }) else { return }
         let turningOn = !session.exercises[ei].sets[si].done
+        session.selectedExerciseId = exerciseId
         session.exercises[ei].sets[si].done = turningOn
         session.exercises[ei].sets[si].completedAt = turningOn ? Date() : nil
         if turningOn {
@@ -580,6 +582,7 @@ final class GymStore {
         gymEquipment = snapshot.gymEquipment ?? []
         normalizeWeek()
         refreshWorkoutAlerts()
+        refreshSystemSurfaces()
     }
 
     func snapshot() -> Snapshot {
@@ -612,6 +615,7 @@ final class GymStore {
                 try data.write(to: fileURL, options: .atomic)
             }
             saveError = nil
+            refreshSystemSurfaces()
             return true
         } catch {
             saveError = "无法保存到此设备：\(error.localizedDescription)"

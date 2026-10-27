@@ -6,6 +6,7 @@ struct RootView: View {
     @State private var navigationTab: AppTab = .today
     @State private var keyboardVisible = false
     @State private var workoutPresented = false
+    @State private var bodySyncPresented = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -20,6 +21,15 @@ struct RootView: View {
         }
         .ignoresSafeArea(.container)
         .environment(store)
+        .onChange(of: GymRoutes.shared.pending, initial: true) { _, _ in consumeRoute() }
+        .onChange(of: scenePhase) { _, _ in consumeRoute() }
+        .sheet(isPresented: $bodySyncPresented) {
+            NavigationStack {
+                Form { BodySyncSettings() }
+                    .navigationTitle("身体数据同步")
+                    .toolbar { Button("完成") { bodySyncPresented = false } }
+            }.environment(store)
+        }
         .onChange(of: store.tab, initial: true) { _, value in
             if value != .workout {
                 navigationTab = value
@@ -29,7 +39,7 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { workoutPresented }, set: { presented in
             setWorkoutPresented(presented)
             if !presented && store.tab == .workout { store.tab = .today }
-        })) {
+        }), onDismiss: { consumeRoute() }) {
             WorkoutView(resuming: store.active != nil, onClose: returnToToday)
                 .environment(store).environment(\.scenePhase, scenePhase)
         }
@@ -38,15 +48,18 @@ struct RootView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             store.wellness.activate()
+            store.refreshSystemSurfaces()
             await store.cloud.sync(store: store)
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(30)) } catch { return }
                 store.wellness.refreshTime()
+                store.refreshSystemSurfaces()
                 await store.cloud.sync(store: store)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             store.wellness.activate()
+            store.refreshSystemSurfaces()
         }
         .alert("记录未保存", isPresented: Binding(
             get: { store.wellness.errorMessage != nil },
@@ -65,6 +78,25 @@ struct RootView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = reduceMotion
         withTransaction(transaction) { workoutPresented = presented }
+    }
+
+    private func consumeRoute() {
+        guard scenePhase == .active, let route = GymRoutes.shared.pending else { return }
+        if route == "sync-body" && workoutPresented {
+            store.tab = .body
+            return // Present the sync sheet only after the training cover finishes dismissing.
+        }
+        GymRoutes.shared.pending = nil
+        switch route {
+        case "workout": store.openToday()
+        case "water": store.tab = .water
+        case "body": store.tab = .body
+        case "sync-body":
+            store.tab = .body
+            bodySyncPresented = true
+            Task { if await BodyHealthSync.shared.upload() { await store.cloud.sync(store: store) } }
+        default: break
+        }
     }
 
     private func returnToToday() {

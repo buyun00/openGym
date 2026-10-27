@@ -60,7 +60,7 @@ explicit_glass = [
     if re.search(r"\.\s*(?:glass(?:Prominent)?\b|glassEffect\b)|\bGlassEffectContainer\b", line)
 ]
 native_missing = [p.name for p in NATIVE.glob("*.swift") if p.name not in build_sources]
-stale_sources = [name for name in build_sources if name.endswith(".swift") and not (NATIVE / name).is_file() and not (IOS / "App/App" / name).is_file()]
+stale_sources = [name for name in build_sources if name.endswith(".swift") and not (NATIVE / name).is_file() and not (IOS / "App/App" / name).is_file() and not (IOS / "App" / name).is_file()]
 media_reference = [obj for obj in objects.values() if obj.get("isa") == "PBXFileReference" and obj.get("path") == "../../../catalogue/media"]
 checks = {
     "swift_syntax_only": not errors,

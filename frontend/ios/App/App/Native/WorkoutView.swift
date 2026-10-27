@@ -135,6 +135,9 @@ struct ActiveWorkoutView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if let session = store.active {
+                            if let error = store.liveActivity.errorMessage {
+                                Text("实时活动未启动：\(error)").font(.caption).foregroundStyle(.secondary)
+                            }
                             Button("上传本次运动", systemImage: "heart.text.square") { sheet = .health }
                                 .buttonStyle(.borderedProminent)
                                 .frame(maxWidth: .infinity, alignment: .leading)

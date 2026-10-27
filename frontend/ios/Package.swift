@@ -8,7 +8,7 @@ let package = Package(
     products: [],
     targets: [
         .target(name: "WellnessCore", path: "App/App/Native",
-                exclude: ["WorkoutHealthPicker.swift", "WorkoutHealthReader.swift", "GymCloudSync.swift", "GymConnectionView.swift", "GymSyncBridge.js", "WorkoutLogic.swift", "WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift",
+                exclude: ["GymSystemSurfaces.swift", "BodyHealthSync.swift", "WorkoutHealthPicker.swift", "WorkoutHealthReader.swift", "GymCloudSync.swift", "GymConnectionView.swift", "GymSyncBridge.js", "WorkoutLogic.swift", "WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymModels.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift",
                           "PlanView.swift", "WorkoutView.swift", "BodyView.swift", "WaterView.swift", "LibraryView.swift",
                           "EquipmentView.swift", "RoutineEditorView.swift", "exercises.json", "WaterMotion.swift",
                           "WaterBackground.swift", "WaterScene.metal", "WellnessNotifications.swift", "WellnessStore.swift",
@@ -17,7 +17,7 @@ let package = Package(
                 sources: ["WellnessModels.swift", "WellnessPersistence.swift", "WaterPhysics.swift"]),
         .testTarget(name: "WellnessCoreTests", dependencies: ["WellnessCore"], path: "Tests/WellnessCoreTests"),
         .target(name: "BodyCore", path: "App/App/Native",
-                exclude: ["WorkoutHealthPicker.swift", "WorkoutHealthReader.swift", "GymCloudSync.swift", "GymConnectionView.swift", "GymSyncBridge.js", "WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift", "PlanView.swift",
+                exclude: ["GymSystemSurfaces.swift", "BodyHealthSync.swift", "WorkoutHealthPicker.swift", "WorkoutHealthReader.swift", "GymCloudSync.swift", "GymConnectionView.swift", "GymSyncBridge.js", "WorkoutStore.swift", "WorkoutCatalogue.swift", "WorkoutSheets.swift", "WorkoutExerciseCard.swift", "WorkoutExerciseOptions.swift", "WorkoutMediaView.swift", "WorkoutRestAlerts.swift", "workout-catalogue.json", "RootView.swift", "GymStore.swift", "Catalogue.swift", "TodayView.swift", "PlanView.swift",
                           "WorkoutView.swift", "BodyView.swift", "WaterView.swift", "LibraryView.swift", "EquipmentView.swift",
                           "RoutineEditorView.swift", "exercises.json", "WaterMotion.swift", "WaterBackground.swift", "WaterScene.metal",
                           "WellnessModels.swift", "WellnessPersistence.swift", "WaterPhysics.swift",
