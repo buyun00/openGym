@@ -9,7 +9,7 @@
         <key>CFBundleURLSchemes</key><array><string>opengym</string></array>
     </dict></array>
     <key>NSHealthShareUsageDescription</key>
-    <string>读取你手动选择的体能训练、心率和活动能量；通过身体同步入口读取当天体重、体脂率和去脂体重，并上传到你配置的服务器。</string>
+    <string>读取你手动选择的体能训练、心率和活动能量；通过身体同步入口读取当天体重、体脂率、去脂体重、睡眠分期、步数、静息心率和心率变异性，并上传到你配置的服务器。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

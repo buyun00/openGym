@@ -81,7 +81,9 @@ final class BodyHealthSync {
             }
             guard HKHealthStore.isHealthDataAvailable() else { throw BodySyncError(message: "此设备不支持健康数据。") }
             status = "正在读取健康数据"
-            try await health.requestAuthorization(toShare: [], read: Set(metrics.map { $0.0 as HKObjectType }))
+            let dailyTypes: Set<HKObjectType> = [HKQuantityType(.stepCount), HKQuantityType(.restingHeartRate),
+                HKQuantityType(.heartRateVariabilitySDNN), HKCategoryType(.sleepAnalysis)]
+            try await health.requestAuthorization(toShare: [], read: Set(metrics.map { $0.0 as HKObjectType }).union(dailyTypes))
             // Match the existing hook's Asia/Shanghai date contract; never relabel an old sample as today.
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -97,8 +99,19 @@ final class BodyHealthSync {
                     if value.isFinite && value > 0 { payload[key] = value }
                 }
             }
+            for (type, unit, key, options) in [
+                (HKQuantityType(.stepCount), HKUnit.count(), "steps", HKStatisticsOptions.cumulativeSum),
+                (HKQuantityType(.restingHeartRate), HKUnit.count().unitDivided(by: .minute()), "resting_hr", .discreteAverage),
+                (HKQuantityType(.heartRateVariabilitySDNN), HKUnit.secondUnit(with: .milli), "hrv_ms", .discreteAverage)
+            ] {
+                if let value = try await statistic(type, unit: unit, options: options, start: start, end: end),
+                   value.isFinite && value >= 0 { payload[key] = value }
+            }
+            for (key, value) in Self.sleepSummary(try await sleepSamples(start: start, end: end), start: start, end: end) {
+                payload[key] = value
+            }
             guard payload.count > 1 else {
-                throw BodySyncError(message: "今天没有可读取的身体样本。请检查健康权限或稍后重试；未上传空值。")
+                throw BodySyncError(message: "今天没有可读取的身体或健康样本。请检查健康权限或稍后重试；未上传空值。")
             }
             var request = URLRequest(url: URL(string: connection.base + "/api/hook/body")!, timeoutInterval: 30)
             request.httpMethod = "POST"
@@ -114,6 +127,72 @@ final class BodyHealthSync {
             status = "身体数据已上传 · \(formatter.string(from: end))"
             return true
         } catch { status = error.localizedDescription; return false }
+    }
+
+    private func statistic(_ type: HKQuantityType, unit: HKUnit, options: HKStatisticsOptions,
+                           start: Date, end: Date) async throws -> Double? {
+        try await withCheckedThrowingContinuation { continuation in
+            let gate = BodySampleGate<Double?>(continuation)
+            let query = HKStatisticsQuery(quantityType: type,
+                quantitySamplePredicate: HKQuery.predicateForSamples(withStart: start, end: end, options: [.strictStartDate, .strictEndDate]),
+                options: options) { _, statistics, error in
+                    if let error { gate.resolve(.failure(error)) }
+                    else {
+                        let quantity = options == .cumulativeSum ? statistics?.sumQuantity() : statistics?.averageQuantity()
+                        gate.resolve(.success(quantity?.doubleValue(for: unit)))
+                    }
+                }
+            health.execute(query)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                if gate.resolve(.failure(BodySyncError(message: "健康数据读取超时，请重试。"))) { self.health.stop(query) }
+            }
+        }
+    }
+
+    private func sleepSamples(start: Date, end: Date) async throws -> [HKCategorySample] {
+        try await withCheckedThrowingContinuation { continuation in
+            let gate = BodySampleGate<[HKCategorySample]>(continuation)
+            let query = HKSampleQuery(sampleType: HKCategoryType(.sleepAnalysis),
+                predicate: HKQuery.predicateForSamples(withStart: start, end: end, options: []),
+                limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
+                    if let error { gate.resolve(.failure(error)) }
+                    else { gate.resolve(.success(samples as? [HKCategorySample] ?? [])) }
+                }
+            health.execute(query)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                if gate.resolve(.failure(BodySyncError(message: "睡眠数据读取超时，请重试。"))) { self.health.stop(query) }
+            }
+        }
+    }
+
+    // Clip to Shanghai's calendar day and count overlapping sources only once.
+    // Detailed stages beat unspecified sleep; later-ending samples break stage conflicts.
+    private static func sleepSummary(_ samples: [HKCategorySample], start: Date, end: Date) -> [String: Double] {
+        let keys: [Int: String] = [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue: "asleep_min",
+            HKCategoryValueSleepAnalysis.asleepCore.rawValue: "core_min",
+            HKCategoryValueSleepAnalysis.asleepDeep.rawValue: "deep_min",
+            HKCategoryValueSleepAnalysis.asleepREM.rawValue: "rem_min",
+            HKCategoryValueSleepAnalysis.awake.rawValue: "awake_min"]
+        let usable = samples.filter { keys[$0.value] != nil && $0.endDate > start && $0.startDate < end }
+        let boundaries = Set(usable.flatMap { [max(start, $0.startDate), min(end, $0.endDate)] }).sorted()
+        var minutes: [String: Double] = [:]
+        guard boundaries.count > 1 else { return [:] }
+        for i in 1..<boundaries.count {
+            let a = boundaries[i - 1], b = boundaries[i]
+            let covering = usable.filter { $0.startDate < b && $0.endDate > a }.sorted {
+                let left = $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue ? 0 : 1
+                let right = $1.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue ? 0 : 1
+                if left != right { return left > right }
+                if $0.endDate != $1.endDate { return $0.endDate > $1.endDate }
+                return $0.uuid.uuidString < $1.uuid.uuidString
+            }
+            if let sample = covering.first, let key = keys[sample.value] {
+                minutes[key, default: 0] += b.timeIntervalSince(a) / 60
+            }
+        }
+        let asleep = minutes.filter { $0.key != "awake_min" }.values.reduce(0, +)
+        if asleep > 0 { minutes["sleep_hours"] = asleep / 60 }
+        return minutes
     }
 
     private func latest(_ type: HKQuantityType, start: Date, end: Date) async throws -> HKQuantitySample? {
@@ -133,11 +212,11 @@ final class BodyHealthSync {
     }
 }
 
-private final class BodySampleGate: @unchecked Sendable {
+private final class BodySampleGate<Value>: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<HKQuantitySample?, Error>?
-    init(_ continuation: CheckedContinuation<HKQuantitySample?, Error>) { self.continuation = continuation }
-    @discardableResult func resolve(_ result: Result<HKQuantitySample?, Error>) -> Bool {
+    private var continuation: CheckedContinuation<Value, Error>?
+    init(_ continuation: CheckedContinuation<Value, Error>) { self.continuation = continuation }
+    @discardableResult func resolve(_ result: Result<Value, Error>) -> Bool {
         lock.lock(); let pending = continuation; continuation = nil; lock.unlock()
         pending?.resume(with: result)
         return pending != nil
@@ -151,7 +230,7 @@ struct BodySyncSettings: View {
     private var sync: BodyHealthSync { .shared }
     var body: some View {
         Section("身体数据快捷指令") {
-            Text("每天定时打开 opengym://sync-body，读取当天体重、体脂率和去脂体重并上传。首次使用请在解锁状态授权健康读取。")
+            Text("每天定时打开 opengym://sync-body，读取当天体重、体脂、去脂体重、睡眠分期、步数、静息心率与 HRV 并一次上传。首次使用请在解锁状态授权健康读取。")
                 .font(.footnote)
             TextField("HTTPS 地址（以 /gym 结尾）", text: $base).textInputAutocapitalization(.never).autocorrectionDisabled()
             SecureField("WEIGHT_HOOK_TOKEN", text: $token).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -160,7 +239,7 @@ struct BodySyncSettings: View {
                 Task { if await sync.upload() { await store.cloud.sync(store: store) } }
             }.disabled(sync.busy)
             Text(sync.status).font(.footnote).foregroundStyle(.secondary)
-            Text("仅使用已有 Hook 的专用令牌；按 Hook 配置的账号上传。原来的快捷指令 POST 上传仍然可用。")
+            Text("仅使用已有 Hook 的专用令牌；按 Hook 配置的账号上传。请将旧的「读健康 → POST」快捷指令替换为打开 opengym://sync-body。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

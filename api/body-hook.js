@@ -239,6 +239,11 @@ export function parseHealth(b) {
     }
     Object.defineProperty(out, '_stages', { value: st, enumerable: false });
   }
+  // Native explicit minutes take precedence over legacy paired durations/stages.
+  for (const key of ['deep_min', 'rem_min', 'core_min', 'awake_min', 'asleep_min']) {
+    const value = b[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1440) out[key] = r1(value);
+  }
   const hr = intOf(b.resting_hr, 20, 250); if (hr != null) out.resting_hr = Math.round(hr);
   const hv = intOf(b.hrv_ms ?? b.hrv, 1, 1000); if (hv != null) out.hrv_ms = r1(hv);
   const st = intOf(b.steps, 0, 300000, true); if (st != null) out.steps = Math.round(st);
