@@ -4,7 +4,9 @@
 
 本次提交仅含 iOS HealthKit 接入、同步字段、健康指标显示、工程权限、同步往返测试及本文。混合文件按改动拆分，未包含 UI refinement 和个人连接配置。下文 API/邮件验证描述的是完整工作区的实现，不表示这些服务端改动已包含在本提交。
 
-`api/workout-sync-events.js` 和 `api/test/workout-sync-events.test.js` 在提交前均是另一批暂存但尚未提交的新文件，HEAD 中不存在；无法只提交其中 health 几行而不引入整个未提交事件模块。因此这两文件以及依赖它的 `api/test/workout-health.test.js` 保留在原工作区，待事件模块自身提交后再提交 HealthKit API 增量。仅检出本提交尚不包含服务端完成事件扩展。没有 push 或部署。
+`api/workout-sync-events.js` 和 `api/test/workout-sync-events.test.js` 仍是另一批暂存但尚未提交的新文件；无法只提交其中 health 几行而不引入整个未提交事件模块。后续本地提交已将 health 组装提取为独立的 `api/workout-health.js`，并提交直接依赖它的 `api/test/workout-health.test.js`，覆盖数值校验、缺失值及邮件/Webhook envelope 字段。Dockerfile 仅纳入新 helper 的 COPY 项，其余 API 模块 COPY 改动继续留在原暂存区。
+
+完整工作区的 `completedPayload` 已调用 `...completedHealthFields(w)`，对应的真实 PUT → 邮件/Webhook 集成断言也保留。这两个事件模块文件及其接线尚未提交，待它们自身的基础改动提交后再收尾。仅检出当前提交尚不会启用生产 PUT 完成事件扩展；没有 push 或部署。`WorkoutView.swift` 与 `check-native-workout.py` 的未提交差异属于 UI 导航/样式及对应静态检查，不属于 HealthKit。
 
 ## 实现
 
