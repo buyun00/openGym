@@ -1,11 +1,11 @@
-// Private iOS builds use a data-only credential, never an anonymous default user.
+// Private iOS builds use a data-and-workout-events credential, never an anonymous default user.
 // It is signed by the existing server secret and revoked by the existing user's sv counter.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const allowed = new Set(['GET /api/me', 'GET /api/data', 'GET /api/data/rev', 'PUT /api/data']);
+const allowed = new Set(['GET /api/me', 'GET /api/data', 'GET /api/data/rev', 'PUT /api/data', 'POST /api/events']);
 
 export function personalSession(req, payload, users, bearer) {
   if (!bearer || !allowed.has(`${req.method} ${new URL(req.url, 'http://localhost').pathname}`)) return null;

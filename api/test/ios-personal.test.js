@@ -67,6 +67,14 @@ test('real API: private build reads the web profile without pairing; scope and r
   const put = await fetch(url + '/api/data', {method: 'PUT', headers, body: JSON.stringify({state: modified, baseRev: first.rev, baseWid: first.state._wid})});
   assert.equal(put.status, 200);
   assert.equal((await fetch(url + '/api/data/rev', {headers})).status, 200);
+  for (const type of ['workout.started', 'exercise.completed', 'workout.completed']) {
+    assert.equal((await fetch(url + '/api/events', {method:'POST', headers,
+      body:JSON.stringify({type, data:{workout_id:'native-1'}})})).status, 202);
+  }
+  assert.equal((await fetch(url + '/api/events', {method:'POST', headers,
+    body:JSON.stringify({type:'test'})})).status, 400);
+  assert.equal((await fetch(url + '/api/events/test', {method:'POST', headers, body:'{}'})).status, 403);
+  assert.equal((await fetch(url + '/api/events', {method:'POST', headers:{...headers, Authorization:`Bearer ${config.token}x`}, body:'{}'})).status, 401);
   // A scoped credential must never be exchanged for a general account session.
   for (const [method, route] of [['POST', '/api/pair/create'], ['POST', '/api/logout/all'], ['GET', '/api/admin/users']]) {
     assert.equal((await fetch(url + route, {method, headers, ...(method === 'POST' ? {body: '{}'} : {})})).status, 401);
@@ -78,4 +86,5 @@ test('real API: private build reads the web profile without pairing; scope and r
   assert.equal(web.state.restSec, 125); assert.equal(web.state.bodyweight[0].w, 70);
   assert.equal((await fetch(url + '/api/logout/all', {method: 'POST', headers: webHeaders, body: '{}'})).status, 200);
   assert.equal((await fetch(url + '/api/data', {headers})).status, 401);
+  assert.equal((await fetch(url + '/api/events', {method:'POST', headers, body:'{}'})).status, 401);
 });

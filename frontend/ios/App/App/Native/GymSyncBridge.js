@@ -180,5 +180,50 @@ var GymSyncBridge = (() => {
     delete result.active;
     return {state:result,changed:!same(raw,result),snapshot:{...before,...after}};
   }
-  return {projection,prepare,merge,uuid,fields,day};
+  // Native weights are kg and JSONEncoder dates are Unix seconds.
+  function workoutEvents(previous, next, raw = {}) {
+    const events = [], a = next.active, before = previous.active;
+    const round = n => Math.round(n * 10) / 10;
+    const routines = w => [...new Set(list(w.exercises).map(e => e.routineId).filter(Boolean))]
+      .map(id => list(raw.routines).find(r => uuid(r.id) === id)?.id || id);
+    const exercises = w => list(w.exercises).map((e, i, all) => ({
+      index:i+1, total:all.length, exercise_id:e.exerciseId, name:e.name, name_en:null,
+      rest_sec_planned:e.restSeconds ?? next.restSeconds ?? null, note:e.note || null,
+      sets:list(e.sets).map((v,k) => ({n:k+1, done:!!v.done, reps:v.reps ?? null,
+        weight_kg:v.weight ?? null, duration_sec:v.seconds ?? (v.minutes == null ? null : Math.round(v.minutes*60)),
+        distance_km:v.minutes != null && v.speed != null ? v.minutes*v.speed/60 : null,
+        type:null, done_at:v.completedAt == null ? null : v.completedAt*1000}))
+    }));
+    const emit = (type, key, data) => events.push({event_id:key, type, data});
+    if (a && a.id !== before?.id) emit('workout.started', 'start:'+a.id, {
+      workout_id:a.id, name:a.name, routine_ids:routines(a), started_at:a.startedAt*1000,
+      exercises:exercises(a).map(e=>({index:e.index,exercise_id:e.exercise_id,name:e.name,
+        planned_sets:e.sets.length,rest_sec_planned:e.rest_sec_planned}))
+    });
+    if (a) list(a.exercises).forEach((e,i) => {
+      const old = before?.id === a.id ? list(before.exercises).find(x=>x.id===e.id) : null;
+      // Match the web contract: emit when all sets of an exercise are complete.
+      if (!list(e.sets).length || !e.sets.every(v=>v.done) || (old?.sets?.length && old.sets.every(v=>v.done))) return;
+      emit('exercise.completed', 'exercise:'+a.id+':'+e.id+':'+e.exerciseId, {
+        workout_id:a.id,workout_name:a.name,completed_at:Math.max(...e.sets.map(v=>(v.completedAt || a.startedAt)*1000)),
+        exercise:exercises(a)[i]
+      });
+    });
+    if (before && !a) {
+      const w = list(next.workouts).find(w=>w.id===before.id && w.finishedAt != null);
+      if (w && !list(previous.workouts).some(x=>x.id===w.id)) {
+        const exs=exercises(w), totals={sets:0,reps:0,volume_kg:0,cardio_min:0};
+        for (const e of exs) for (const v of e.sets) if (v.done) {
+          totals.sets++; totals.reps+=v.reps || 0; totals.volume_kg+=(v.reps || 0)*(v.weight_kg || 0);
+          if (!v.reps) totals.cardio_min+=(v.duration_sec || 0)/60;
+        }
+        totals.volume_kg=round(totals.volume_kg); totals.cardio_min=round(totals.cardio_min);
+        emit('workout.completed','done:'+w.id,{workout_id:w.id,name:w.name,routine_ids:routines(w),
+          started_at:w.startedAt*1000,ended_at:w.finishedAt*1000,duration_min:round((w.finishedAt-w.startedAt)/60),
+          body_weight_kg:null,totals,exercises:exs,...(w.health ? {health:clone(w.health)} : {})});
+      }
+    }
+    return {events};
+  }
+  return {projection,prepare,merge,uuid,fields,day,workoutEvents};
 })();

@@ -1,8 +1,8 @@
 // Finished sessions that arrive through PUT /api/data, rather than POST /api/events.
 //
 // The web app watches its own store and fire-and-forgets workout.completed (frontend
-// workout-events.js). The personal iOS build never does: it only syncs the saved document
-// (GET/PUT /api/data), and its credential is not allowed to post events. A session is finished
+// workout-events.js). Native iOS also posts live events; sync remains a fallback for older
+// builds, imports and failed posts. A session is finished
 // when it shows up in `workouts` with an `end` timestamp. In-progress work is not a signal —
 // both clients keep `active` on the device, and PUT deletes it — so workout.started is not
 // emitted from here. A start inferred at the moment the session is already over would be late,
@@ -62,8 +62,12 @@ export function claimEvent(dir, uid, key, now = Date.now(), max = MAX_KEYS) {
 // POST /api/events. Events we cannot key (no workout id, or not a completion) send as they
 // always have. A completion whose id was already claimed — by a sync write, or an earlier post —
 // does not send again.
-export function claimClientEvent(dir, uid, type, data, now) {
-  if (type !== 'workout.completed') return true;
+export function claimClientEvent(dir, uid, type, data, now, eventId) {
+  if (type !== 'workout.completed') {
+    // Stable optional transport key; preserve legacy clients without a key.
+    if (typeof eventId !== 'string' || !eventId || eventId.length > ID_MAX) return true;
+    return claimEvent(dir, uid, `client:${type}:${eventId}`, now);
+  }
   const key = completedEventKey(data && typeof data === 'object' ? data.workout_id : null);
   if (!key) return true;
   return claimEvent(dir, uid, key, now);

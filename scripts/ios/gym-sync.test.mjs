@@ -237,3 +237,40 @@ test('real local API: browser pairing, first download, conditional write, readba
   const replay=await fetch(url+'/api/pair/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
   assert.equal(replay.status,400);
 });
+
+test('native live events: start, all-sets completion, finish health, discard and history isolation', () => {
+  const raw = fixture(), initial = project(raw);
+  const w = {id:'B772D421-E418-4A34-A729-885000000001',name:'训练',startedAt:1793000000,
+    exercises:[{id:'entry-1',exerciseId:'0585',name:'腿屈伸',routineId:bridge.uuid('short-plan'),
+      sets:[{id:'set-1',weight:15,reps:10,done:false},{id:'set-2',weight:15,reps:8,done:false}]}]};
+  const active = {...copy(initial),active:w};
+  const events = (a,b) => bridge.workoutEvents(a,b,raw).events;
+  const start = events(initial,active);
+  assert.equal(start.length,1); assert.equal(start[0].type,'workout.started');
+  assert.equal(start[0].data.started_at,1793000000000);
+  assert.deepEqual(start[0].data.routine_ids,['short-plan']);
+  assert.equal(start[0].data.exercises[0].planned_sets,2);
+  const partial=copy(active); partial.active.exercises[0].sets[0].done=true;
+  assert.equal(events(active,partial).length,0);
+  const done=copy(partial); done.active.exercises[0].sets[1].done=true;
+  done.active.exercises[0].sets[1].completedAt=1793000100;
+  const exercise=events(partial,done)[0];
+  assert.equal(exercise.type,'exercise.completed');
+  assert.equal(exercise.data.exercise.sets[1].weight_kg,15);
+  assert.equal(exercise.data.completed_at,1793000100000);
+  assert.equal(events(done,copy(done)).length,0);
+  const health={source:'apple_health',status:'available',heart_rate_avg_bpm:125,active_energy_kcal:210};
+  const finished={...copy(done.active),finishedAt:1793000600,health};
+  const saved={...copy(done),active:null,workouts:[...done.workouts,finished]};
+  const completion=events(done,saved)[0];
+  assert.equal(completion.type,'workout.completed'); assert.equal(completion.data.workout_id,w.id);
+  assert.deepEqual(completion.data.health,health);
+  assert.deepEqual(completion.data.totals,{sets:2,reps:18,volume_kg:270,cardio_min:0});
+  assert.equal(completion.data.duration_min,10);
+  assert.equal(events(done,{...done,active:null}).length,0);
+  assert.equal(events(initial,saved).length,0);
+  assert.equal(events(saved,copy(saved)).length,0);
+  const mapped=bridge.prepare(initial,saved,raw,catalogue).state.workouts.find(x=>x.id===w.id);
+  assert.equal(mapped.id,completion.data.workout_id);
+  assert.deepEqual(mapped.health,completion.data.health);
+});

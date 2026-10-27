@@ -2515,7 +2515,7 @@ const routes = {
     if (!hookOn && !mailOn) return json(res, 202, { ok: true, delivered: false, reason: 'disabled' });
     const data = body.data && typeof body.data === 'object' ? body.data : {};
     // Shared with noteSyncedWorkouts: the sync write and this post are one notification.
-    if (!claimClientEvent(DATA, user.id, body.type, data)) return json(res, 202, { ok: true, duplicate: true });
+    if (!claimClientEvent(DATA, user.id, body.type, data, undefined, body.event_id)) return json(res, 202, { ok: true, duplicate: true });
     const ev = deliverWorkoutEvent(user, body.type, data);
     json(res, 202, { ok: true, id: ev.id });
   },

@@ -1,5 +1,5 @@
-/* A finished session that shows up in PUT /api/data — the only write the personal iOS app
-   makes — is mailed and webhooked once, through the same helpers as POST /api/events.
+/* A finished session that shows up in PUT /api/data is mailed and webhooked once,
+   through the same helpers as POST /api/events from native or web clients.
    A later rewrite of that id, or the web client's own post of it, does not send again.
    workout.started is still only what the client posts: the synced document has no in-progress
    session to see one in. */
@@ -240,8 +240,8 @@ test('PUT /api/data mails a newly completed workout once, including when the web
     assert.equal(r.status, 200, JSON.stringify(body));
     return body;
   }
-  async function post(type, data, useHeaders = webHeaders) {
-    const r = await fetch(base + '/api/events', { method: 'POST', headers: useHeaders, body: JSON.stringify({ type, data }) });
+  async function post(type, data, useHeaders = headers, event_id) {
+    const r = await fetch(base + '/api/events', { method: 'POST', headers: useHeaders, body: JSON.stringify({ type, data, event_id }) });
     return { status: r.status, body: await r.json() };
   }
 
@@ -284,7 +284,7 @@ test('PUT /api/data mails a newly completed workout once, including when the web
   });
   await settled('ios-1', 1);
 
-  const again = await post('workout.completed', { workout_id: 'ios-1', name: 'from web' });
+  const again = await post('workout.completed', { workout_id: 'ios-1', name: 'from web' }, webHeaders);
   assert.equal(again.status, 202);
   assert.equal(again.body.duplicate, true);
   await settled('ios-1', 1);
@@ -334,4 +334,22 @@ test('PUT /api/data mails a newly completed workout once, including when the web
   assert.ok(caught.some(m => m.includes('first-start') && m.includes('workout.started')));
   assert.ok(caught.some(m => m.includes('second-start') && m.includes('workout.started')));
   assert.equal(hits.filter(h => h && h.type === 'workout.started').length, 2);
+  for (const type of ['workout.started', 'exercise.completed']) {
+    const first = await post(type, {workout_id:'retry-live'}, headers, 'stable-live');
+    const retry = await post(type, {workout_id:'retry-live'}, headers, 'stable-live');
+    assert.equal(first.status,202);
+    assert.equal(first.body.duplicate,undefined);
+    assert.equal(retry.body.duplicate,true);
+  }
+});
+
+test('stable transport keys deduplicate live events per profile and type', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-retry-'));
+  try {
+    for (const type of ['workout.started', 'exercise.completed']) {
+      assert.equal(claimClientEvent(dir,'one',type,{},1,'stable'),true);
+      assert.equal(claimClientEvent(dir,'one',type,{},2,'stable'),false);
+      assert.equal(claimClientEvent(dir,'two',type,{},3,'stable'),true);
+    }
+  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 });

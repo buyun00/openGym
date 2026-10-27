@@ -65,6 +65,7 @@ final class GymCloudSync {
     @ObservationIgnored private var scheduled: Task<Void, Never>?
     @ObservationIgnored private var bridge: JSContext?
     @ObservationIgnored private var storageError: String?
+    @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private let session = URLSession(configuration: .ephemeral, delegate: GymNoRedirect(), delegateQueue: nil)
 
     // One atomic file owns both the last downloaded baseline and the pending local snapshot.
@@ -76,6 +77,12 @@ final class GymCloudSync {
         var baseline: Data
         var local: GymStore.Snapshot
         var syncedAt: Date?
+        var pendingEvents: [PendingEvent]?
+        var eventKeys: [String]?
+    }
+    private struct PendingEvent: Codable {
+        var key: String
+        var body: Data
     }
     private var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -130,9 +137,54 @@ final class GymCloudSync {
 
     func persistLocal(_ snapshot: GymStore.Snapshot) throws {
         guard var next = cache else { throw GymSyncError(message: "尚未下载网页数据。") }
+        // Generate only from local durable transitions, never downloaded history. Event
+        // conversion failure must not block saving a workout. Network work is always async.
+        if let previous = try? snapshotObject(next.local), let current = try? snapshotObject(snapshot),
+           let raw = try? object(next.remote),
+           let result = try? call("workoutEvents", [previous, current, raw]),
+           let events = result["events"] as? [[String: Any]] {
+            var keys = next.eventKeys ?? []
+            var pending = next.pendingEvents ?? []
+            for event in events {
+                guard let key = event["event_id"] as? String, !keys.contains(key),
+                      !pending.contains(where: { $0.key == key }), let bytes = try? data(event) else { continue }
+                pending.append(PendingEvent(key: key, body: bytes)); keys.append(key)
+            }
+            next.pendingEvents = pending
+            next.eventKeys = Array(keys.suffix(2000))
+        }
         next.local = snapshot
         try persist(next)
+        scheduleEvents()
         status = "本机已保存，等待同步"
+    }
+
+    // FIFO outbox is account/base-bound by Cache. A lost acknowledgement is safe to retry:
+    // the server claims stable event_id keys, and completion shares the PUT workout key.
+    private func scheduleEvents() {
+        guard eventTask == nil, storageError == nil, connection != nil,
+              cache?.pendingEvents?.isEmpty == false else { return }
+        eventTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.eventTask = nil }
+            var failures = 0
+            while let item = self.cache?.pendingEvents?.first, let auth = self.connection {
+                do {
+                    let response = try await self.request(base: auth.base, path: "/api/events", token: auth.token,
+                                                          body: self.object(item.body), timeout: 10)
+                    guard response["ok"] as? Bool == true else { return }
+                    // Read the latest cache after await; do not overwrite newer local edits.
+                    guard var next = self.cache else { return }
+                    next.pendingEvents = (next.pendingEvents ?? []).filter { $0.key != item.key }
+                    try self.persist(next)
+                    failures = 0
+                } catch {
+                    failures += 1
+                    if failures >= 3 { return } // Retain on disk; next edit/foreground sync retries.
+                    do { try await Task.sleep(for: .seconds(failures * 2)) } catch { return }
+                }
+            }
+        }
     }
 
     func schedule(store: GymStore) {
@@ -150,6 +202,7 @@ final class GymCloudSync {
         guard !busy else { return }
         if connection == nil || storageError != nil { restore(into: store) }
         guard connection != nil else { return }
+        scheduleEvents()
         busy = true; errorMessage = nil; status = "正在同步"
         defer { busy = false }
         do { try await exchange(store: store) }
@@ -232,6 +285,10 @@ final class GymCloudSync {
     }
 
     private func persist(_ next: Cache) throws {
+        var next = next
+        // Sync readback replaces the baseline, but must retain the live outbox and keys.
+        if next.pendingEvents == nil { next.pendingEvents = cache?.pendingEvents }
+        if next.eventKeys == nil { next.eventKeys = cache?.eventKeys }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try JSONEncoder().encode(next).write(to: cacheURL, options: [.atomic, .completeFileProtectionUnlessOpen])
         cache = next
@@ -278,9 +335,9 @@ final class GymCloudSync {
         return state
     }
     private func request(base: String, path: String, token: String?, method: String = "POST",
-                         body: [String: Any]? = nil, allowConflict: Bool = false) async throws -> [String: Any] {
+                         body: [String: Any]? = nil, allowConflict: Bool = false, timeout: TimeInterval? = nil) async throws -> [String: Any] {
         guard let url = URL(string: base + path) else { throw GymSyncError(message: "服务器地址无效。") }
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: body == nil ? 20 : 60)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout ?? (body == nil ? 20 : 60))
         request.httpMethod = body == nil ? "GET" : method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
