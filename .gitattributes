@@ -1,0 +1,3 @@
+# Force LF for shell scripts (Windows checkout must not ship CRLF into Docker entrypoints)
+*.sh text eol=lf
+web/*.sh text eol=lf
