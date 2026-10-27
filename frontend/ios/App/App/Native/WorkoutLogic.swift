@@ -127,6 +127,17 @@ enum WorkoutLogic {
         return result
     }
 
+    /// Stable ID makes repeated imports of one HealthKit workout the same cloud record.
+    static func importedHealth(_ health: WorkoutHealth, name: String) -> WorkoutSession? {
+        guard let rawID = health.workout_id, let id = UUID(uuidString: rawID),
+              health.window_start.isFinite, health.window_end.isFinite,
+              health.window_start > 0, health.window_end > health.window_start else { return nil }
+        return WorkoutSession(id: id, name: name,
+            startedAt: Date(timeIntervalSince1970: health.window_start / 1000),
+            finishedAt: Date(timeIntervalSince1970: health.window_end / 1000), exercises: [],
+            note: "从 Apple 健康手动导入", health: health)
+    }
+
     static func summary(_ set: WorkoutSet, mode: WorkoutMode) -> String {
         switch mode {
         case .cardio:

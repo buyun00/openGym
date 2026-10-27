@@ -312,6 +312,20 @@ test('PUT /api/data mails a newly completed workout once, including when the web
   await arrived('batch-a');
   await arrived('batch-b');
 
+  const importedHealth = { source: 'apple_health', status: 'available', window_start: start, window_end: end,
+    queried_at: end + 1000, workout_id: 'B7F450E5-7462-451D-BF86-4BA5F8E7B223',
+    heart_rate_avg_bpm: 130, heart_rate_max_bpm: 165, active_energy_kcal: 320 };
+  await put(s => { s.workouts.push(workout(importedHealth.workout_id, { name: '骑行 · 健康导入', start, end,
+    entries: [], routineId: null, routineIds: [], health: importedHealth })); });
+  await arrived(importedHealth.workout_id);
+  const imported = hooked(importedHealth.workout_id)[0].data;
+  assert.deepEqual(imported.exercises, []);
+  assert.deepEqual(imported.routine_ids, []);
+  assert.equal(imported.health.active_energy_kcal, 320);
+  assert.match(mailed(importedHealth.workout_id)[0], /"heart_rate_avg_bpm": 130/);
+  await put(s => { s.workouts.find(w => w.id === importedHealth.workout_id).health.active_energy_kcal = 325; });
+  await settled(importedHealth.workout_id, 1);
+
   const firstStart = await post('workout.started', { workout_id: 'start-same', marker: 'first-start' });
   const secondStart = await post('workout.started', { workout_id: 'start-same', marker: 'second-start' });
   assert.equal(firstStart.status, 202);

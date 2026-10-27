@@ -4,6 +4,7 @@ struct TodayView: View {
     @Environment(GymStore.self) private var store
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var showSettings = false
+    @State private var showHealthImport = false
     @State private var selectedSupplement: Supplement?
     @State private var pendingWaterML = 250
     @State private var initializedWaterAmount = false
@@ -42,7 +43,7 @@ struct TodayView: View {
             .background {
                 // Background can extend under navigation; the foreground above
                 // uses only the hosting controller's actual safe viewport.
-                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && selectedSupplement == nil)
+                WaterBackground(progress: wellness.waterFill, active: store.tab == .today && !showSettings && !showHealthImport && selectedSupplement == nil)
             }
             .navigationTitle("今天")
             .navigationBarTitleDisplayMode(.inline)
@@ -72,6 +73,7 @@ struct TodayView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .sheet(isPresented: $showSettings) { WellnessSettingsSheet() }
+            .sheet(isPresented: $showHealthImport) { WorkoutHealthImportSheet() }
             .sheet(item: $selectedSupplement) { supplement in DoseSheet(supplement: supplement) }
             .sensoryFeedback(.success, trigger: waterConfirmation)
             .onAppear {
@@ -102,41 +104,51 @@ struct TodayView: View {
 
     private func workoutSummary(compact: Bool) -> some View {
         let highlighted = !store.didTrainToday
-        return Button {
-            // Open the existing chooser/resume flow. Merely entering the card
-            // must never create a session or replace an unfinished one.
-            store.tab = .workout
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: store.active == nil ? "dumbbell.fill" : "play.fill")
-                    .font(compact ? .title3 : .title2).padding(compact ? 10 : 12)
-                    .background(.quaternary, in: .circle).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("今日训练").font(compact ? .caption : .subheadline)
-                        Spacer(minLength: 0)
-                        Text(trainingActionTitle).font(compact ? .caption.bold() : .subheadline.bold())
-                    }
-                    Text(store.todayTitle).font(compact ? .headline : .title3.bold())
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let detail = trainingDetail {
-                        Text(detail).font(compact ? .caption : .subheadline)
-                            .foregroundStyle(highlighted ? Color.white : Color.secondary)
+        return VStack(spacing: 8) {
+            Button {
+                // Open the existing chooser/resume flow. Merely entering the card
+                // must never create a session or replace an unfinished one.
+                store.tab = .workout
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: store.active == nil ? "dumbbell.fill" : "play.fill")
+                        .font(compact ? .title3 : .title2).padding(compact ? 10 : 12)
+                        .background(.quaternary, in: .circle).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("今日训练").font(compact ? .caption : .subheadline)
+                            Spacer(minLength: 0)
+                            Text(trainingActionTitle).font(compact ? .caption.bold() : .subheadline.bold())
+                        }
+                        Text(store.todayTitle).font(compact ? .headline : .title3.bold())
                             .fixedSize(horizontal: false, vertical: true)
+                        if let detail = trainingDetail {
+                            Text(detail).font(compact ? .caption : .subheadline)
+                                .foregroundStyle(highlighted ? Color.white : Color.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).accessibilityHidden(true)
                 }
-                Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).accessibilityHidden(true)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(compact ? 12 : 16)
+                .contentShape(RoundedRectangle(cornerRadius: 24))
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(compact ? 12 : 16)
-            .contentShape(RoundedRectangle(cornerRadius: 24))
+            .buttonStyle(HomeTrainingCardStyle(highlighted: highlighted))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(trainingActionTitle)，\(store.todayTitle)")
+            .accessibilityValue(trainingDetail ?? "")
+            .accessibilityHint(store.active != nil ? "继续未完成的训练" : "打开训练选择，可选择计划或自由训练")
+            .accessibilityIdentifier("home-training-card")
+            Button { showHealthImport = true } label: {
+                Label("上传健康运动", systemImage: "heart.text.square")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityHint("从健康手动选择运动并独立上传，无需开始训练")
+            .accessibilityIdentifier("home-health-import")
         }
-        .buttonStyle(HomeTrainingCardStyle(highlighted: highlighted))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(trainingActionTitle)，\(store.todayTitle)")
-        .accessibilityValue(trainingDetail ?? "")
-        .accessibilityHint(store.active != nil ? "继续未完成的训练" : "打开训练选择，可选择计划或自由训练")
-        .accessibilityIdentifier("home-training-card")
     }
 
     private var trainingActionTitle: String {

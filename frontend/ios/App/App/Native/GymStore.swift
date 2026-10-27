@@ -274,6 +274,35 @@ final class GymStore {
         else { active = previous }
     }
 
+    func workoutLinked(to healthID: UUID) -> WorkoutSession? {
+        workouts.first { session in
+            let linkedID = (session.health?.workout_id).flatMap { UUID(uuidString: $0) }
+            return session.id == healthID || linkedID == healthID
+        }
+    }
+
+    @discardableResult
+    func importHealthWorkout(_ health: WorkoutHealth, name: String, replacing id: UUID?, expectedHealth: WorkoutHealth?) -> Bool {
+        guard let imported = WorkoutLogic.importedHealth(health, name: name) else {
+            saveError = "所选健康运动缺少有效的标识或起止时间，未导入。"; return false
+        }
+        let activeHealthID = (active?.health?.workout_id).flatMap { UUID(uuidString: $0) }
+        if active?.id == imported.id || activeHealthID == imported.id {
+            saveError = "这条健康运动已关联正在进行的训练，请先结束该训练，避免重复上传。"; return false
+        }
+        if let existing = workoutLinked(to: imported.id) {
+            guard id == existing.id else {
+                saveError = "这条健康运动已存在，请重新点选并确认更新原记录。"; return false
+            }
+            return attachWorkoutHealth(health, to: existing.id, expectedHealth: expectedHealth)
+        }
+        guard id == nil else { saveError = "原训练已不存在，请刷新后重新选择。"; return false }
+        workouts.append(imported)
+        if save() { return true }
+        workouts.removeAll { $0.id == imported.id }
+        return false
+    }
+
     func clearRest() { mutateActive { $0.restEndsAt = nil; $0.restOwner = nil; $0.restSetOwner = nil } }
 
     func deleteWorkout(_ id: UUID) {

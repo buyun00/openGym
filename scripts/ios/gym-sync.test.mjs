@@ -154,6 +154,25 @@ test('local active workout is never included in a cloud write',()=>{
   const raw=fixture(),base=project(raw),local=copy(base);local.active={private:true};local.restSeconds=100;
   assert.equal(prepare(base,local,raw).state.active,undefined);
 });
+
+test('standalone HealthKit import syncs as completed history without a plan or active session',()=>{
+  const raw=fixture(),base=project(raw),local=copy(base);
+  const health={source:'apple_health',status:'available',workout_id:'B7F450E5-7462-451D-BF86-4BA5F8E7B223',
+    window_start:1700000000000,window_end:1700003600000,queried_at:1700003601000,heart_rate_avg_bpm:130,active_energy_kcal:320};
+  local.active={id:'unrelated-active-session'};
+  local.workouts.push({id:health.workout_id,name:'骑行 · 健康导入',startedAt:1700000000,finishedAt:1700003600,
+    exercises:[],note:'从 Apple 健康手动导入',health});
+  const uploaded=prepare(base,local,raw).state;
+  const imported=uploaded.workouts.find(w=>w.id===health.workout_id);
+  assert.deepEqual(imported.entries,[]);
+  assert.deepEqual(imported.routineIds,[]);
+  assert.equal(imported.start,health.window_start);
+  assert.equal(imported.end,health.window_end);
+  assert.deepEqual(imported.health,health);
+  assert.equal(uploaded.active,undefined);
+  assert.deepEqual(local.active,{id:'unrelated-active-session'});
+  assert.equal(prepare(project(uploaded),project(uploaded),uploaded).changed,false);
+});
 test('new local modifications during an upload can be rebased over the readback',()=>{
   const raw=fixture(),base=project(raw),sent=copy(base);sent.restSeconds=100;
   const readback=prepare(base,sent,raw).state;readback.bodyweight.push({d:'2026-10-21',w:79});

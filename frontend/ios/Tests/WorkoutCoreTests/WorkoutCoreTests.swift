@@ -133,6 +133,23 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertEqual(finished.id, active.id)
     }
 
+    func testStandaloneHealthImportHasStableIdentityAndNoPlanOrExerciseRequirement() throws {
+        let health = WorkoutHealth(status: "available", window_start: 1_700_000_000_000,
+            window_end: 1_700_003_600_000, queried_at: 1_700_003_601_000,
+            workout_id: "B7F450E5-7462-451D-BF86-4BA5F8E7B223", heart_rate_avg_bpm: 130, active_energy_kcal: 320)
+        let first = try XCTUnwrap(WorkoutLogic.importedHealth(health, name: "骑行 · 健康导入"))
+        let second = try XCTUnwrap(WorkoutLogic.importedHealth(health, name: "骑行 · 健康导入"))
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.health, health)
+        XCTAssertTrue(first.exercises.isEmpty)
+        XCTAssertEqual(first.finishedAt?.timeIntervalSince(first.startedAt), 3600)
+        var invalid = health
+        invalid.workout_id = nil
+        XCTAssertNil(WorkoutLogic.importedHealth(invalid, name: "无效"))
+        invalid = health; invalid.window_end = invalid.window_start
+        XCTAssertNil(WorkoutLogic.importedHealth(invalid, name: "无效"))
+    }
+
     func testExplicitHealthChoiceKeepsItsOwnWindowAndSurvivesPersistence() throws {
         let active = session([exercise(done: true)])
         let chosen = WorkoutHealth(status: "available", window_start: 500_000, window_end: 600_000,
