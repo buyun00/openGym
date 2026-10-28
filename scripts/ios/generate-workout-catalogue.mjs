@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EXDB, EXALIAS } from '../../frontend/src/lib/exercises-data.js'
 import { inclineFits } from '../../frontend/src/lib/incline.js'
+import './sync-exercise-aliases.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const zh = JSON.parse(fs.readFileSync(path.join(root, 'catalogue/i18n/zh.json'), 'utf8'))

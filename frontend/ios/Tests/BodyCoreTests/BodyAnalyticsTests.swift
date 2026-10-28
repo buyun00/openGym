@@ -111,6 +111,23 @@ final class BodyAnalyticsTests: XCTestCase {
         XCTAssertEqual(loads.map(\.value), [2, 1])
     }
 
+    func testCrunchAliasUsesBundledMuscleContributions() throws {
+        struct Record: Decodable {
+            let id: String
+            let muscles: [String: Double]
+        }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../App/App/Native/exercises.json").standardizedFileURL
+        let records = try JSONDecoder().decode([Record].self, from: Data(contentsOf: url))
+        let muscles = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.muscles) })
+        let stamp = date(2026, 10, 23)
+        let workout = WorkoutSession(id: UUID(), name: "训练", startedAt: stamp, finishedAt: stamp,
+            exercises: [WorkoutExercise(id: UUID(), exerciseId: "2445", name: "卷腹", sets: [set(nil)])])
+        let loads = BodyAnalytics.muscleLoads([workout], muscles: muscles)
+        XCTAssertGreaterThan(loads.first(where: { $0.id == "abs" })?.value ?? 0, 0)
+        XCTAssertGreaterThan(loads.first(where: { $0.id == "obliques" })?.value ?? 0, 0)
+    }
+
     func testCalendarCombinesRecordsOnSameLocalDay() {
         let stamp = date(2026, 10, 23)
         let days = BodyAnalytics.recordDays(workouts: [session(stamp)],
