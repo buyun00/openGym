@@ -10,6 +10,8 @@ iOS 保存手选运动前每两秒重读同一 HKWorkout，查询与睡眠共用
 
 本轮验证：38 项完成事件、HealthKit、个人凭据及原生同步专项测试通过，包含本地 HTTP → SMTP/Webhook 的首次投递复现、两种到达顺序、重启恢复、部分指标合并、手选记录替换、原截止时间和不重复投递。Swift/Xcode 工程静态检查见 [本轮报告](workout-completion-static-checks-2026-11-03.json)，全部通过；当前 Windows 未执行 Swift 类型检查、XCTest、Xcode 编译或真机 HealthKit 验收。完整 API 与原生桥接回归为 647 项中的 620 项通过，27 项失败均可在未修改的 HEAD 复现，涉及既有日期样例、Windows 文件权限及 API 文档覆盖问题。
 
+交付：修复提交 `d0a62333` 已普通推送 `origin/main`。H3 以原运行镜像为基础仅更新 `server.js` 和 `workout-sync-events.js`，在隔离 Linux 容器中再通过 14 项专项测试后切换 API。部署后的 API 与网页代理健康接口均为 200 且可写，匿名数据请求为 401，API 和网页容器均为 healthy；运行文件 SHA-256 与提交原始字节一致，所有根目录 JSON（含训练状态）部署前后摘要一致，网页容器、环境和挂载未变。生产数据私有备份和原镜像均已保留；没有向生产账户写入测试训练，也没有重发旧完成事件。
+
 HTTP 202 表示已接收（`pending: true` 表示仍在等待），不保证下游成功。已有先认领后投递及 webhook 有限重试语义保持不变。手机需从新源码重新构建安装才能使用所选运动重读；服务端更新可先修复 POST/PUT 的到达竞态。以下为 2026-10-27 的原交付记录。
 
 个人包的训练界面是原生 Swift，未运行网页 workout-events 订阅；GymSyncBridge 是 JavaScriptCore 数据适配器，不是 Capacitor WebView 事件桥。此前个人 Bearer 凭证仅允许数据同步路由，两处共同导致训练中没有事件。此次无需 feature flag。
