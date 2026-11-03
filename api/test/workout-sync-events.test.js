@@ -14,7 +14,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  claimClientEvent, claimEvent, completedEventKey, completedPayload, eventsPath, newlyCompletedWorkouts,
+  claimClientEvent, claimEvent, completionOutbox, completedEventKey, completedPayload, eventsPath, newlyCompletedWorkouts,
 } from '../workout-sync-events.js';
 import { boundPort } from './helpers.mjs';
 
@@ -104,6 +104,8 @@ test('claim is once per workout id, per profile, and survives a rewrite of the f
     const kept = JSON.parse(fs.readFileSync(eventsPath(dir, 'u'), 'utf8'));
     assert.deepEqual(Object.keys(kept.keys), ['workout.completed:a']);
     fs.writeFileSync(eventsPath(dir, 'u'), 'not json');
+    assert.throws(() => claimEvent(dir, 'u', completedEventKey('b')));
+    fs.writeFileSync(eventsPath(dir, 'u'), JSON.stringify({ keys: {} }));
     assert.equal(claimEvent(dir, 'u', completedEventKey('b'), 2, 2), true);
     assert.equal(claimEvent(dir, 'u', completedEventKey('c'), 3, 2), true);
     assert.equal(claimEvent(dir, 'u', completedEventKey('d'), 4, 2), true);
@@ -188,6 +190,7 @@ test('PUT /api/data mails a newly completed workout once, including when the web
       WORKOUT_EMAIL_TO: 'lumi@example.com', WORKOUT_EMAIL_FROM: 'opengym@localhost',
       SMTP_HOST: '127.0.0.1', SMTP_PORT: String(smtpPort),
       WORKOUT_WEBHOOK_URL: `http://127.0.0.1:${hookPort}/hook`,
+      WORKOUT_COMPLETION_HEALTH_WAIT_MS: '800',
     },
   });
   let log = '';
@@ -250,6 +253,28 @@ test('PUT /api/data mails a newly completed workout once, including when the web
   await put(s => { s.restSec = 90; });
   await settled('already-there', 0);
   assert.equal(log.includes('[events] workout.completed'), false);
+
+  // Reproduce the incident: POST wins the race with no HR; PUT arrives with health later.
+  const lateHealth = { status: 'available', heart_rate_avg_bpm: 109, heart_rate_max_bpm: 134, active_energy_kcal: 202 };
+  const held = await post('workout.completed', { workout_id: 'late-health', name: '力量 A' });
+  assert.equal(held.body.pending, true);
+  await settled('late-health', 0); // Neither channel may send the early incomplete snapshot.
+  await put(s => { s.workouts.push(workout('late-health', { start, end, health: lateHealth })); });
+  await arrived('late-health');
+  assert.equal(hooked('late-health')[0].data.health.heart_rate_avg_bpm, 109);
+  assert.equal(hooked('late-health')[0].data.health.heart_rate_max_bpm, 134);
+  assert.equal(hooked('late-health')[0].data.health.active_energy_kcal, 202);
+  assert.match(mailed('late-health')[0], /"heart_rate_max_bpm": 134/);
+  assert.equal((await post('workout.completed', { workout_id: 'late-health' })).body.duplicate, true);
+  await settled('late-health', 1);
+
+  // Reverse order: PUT has partial metrics; the later batch upgrades the held completion.
+  await put(s => { s.workouts.push(workout('put-late', { start, end, health: { status: 'available', active_energy_kcal: 202 } })); });
+  await settled('put-late', 0);
+  await put(s => { s.workouts.find(w => w.id === 'put-late').health = lateHealth; });
+  await arrived('put-late');
+  assert.equal(hooked('put-late')[0].data.health.heart_rate_avg_bpm, 109);
+  assert.match(mailed('put-late')[0], /"active_energy_kcal": 202/);
 
   await put(s => { s.workouts.push(workout('ios-1', { name: '腿', start, end, bw: 70,
     health: { source: 'apple_health', status: 'available', window_start: start, window_end: end,
@@ -352,4 +377,87 @@ test('stable transport keys deduplicate live events per profile and type', () =>
       assert.equal(claimClientEvent(dir,'two',type,{},3,'stable'),true);
     }
   } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+});
+
+test('completion hold survives restart, merges partial health, and keeps the original deadline', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-hold-'));
+  try {
+    let time = 1000, state = { workouts: [] };
+    const deliveries = [], user = { id: 'u' };
+    const options = { dir, now: () => time, waitMs: 60_000, readState: () => state,
+      deliver: (...args) => deliveries.push(args) };
+    const first = completionOutbox(options);
+    assert.deepEqual(first.enqueue(user, { workout_id: 'w' }), { pending: true });
+    time += 30_000;
+    // A started/exercise claim must preserve the pending completion in the shared file.
+    claimClientEvent(dir, user.id, 'exercise.completed', {}, time, 'ex');
+    const restarted = completionOutbox(options);
+    restarted.enqueue(user, { workout_id: 'w', health: { heart_rate_avg_bpm: 109, heart_rate_max_bpm: 134 } });
+    assert.equal(deliveries.length, 0);
+    state.workouts.push(workout('w', { health: { active_energy_kcal: 202 } }));
+    restarted.flush(user);
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0][2].health.heart_rate_avg_bpm, 109);
+    assert.equal(deliveries[0][2].health.active_energy_kcal, 202);
+    assert.deepEqual(restarted.enqueue(user, { workout_id: 'w' }), { duplicate: true });
+
+    restarted.enqueue(user, { workout_id: 'no-health' });
+    time += 59_999;
+    restarted.enqueue(user, { workout_id: 'no-health' });
+    assert.equal(deliveries.length, 1);
+    time++;
+    completionOutbox(options).flush(user);
+    assert.equal(deliveries.length, 2); // Genuine absent readings never become invented zeros.
+    assert.equal(deliveries[1][2].health, undefined);
+    completionOutbox(options).flush(user);
+    assert.equal(deliveries.length, 2);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('completion hold persists partial sync readings and never combines different manual selections', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-partial-'));
+  try {
+    let state = { workouts: [] };
+    const deliveries = [], user = { id: 'u' };
+    const options = { dir, now: () => 1000, readState: () => state,
+      deliver: (_, __, data) => deliveries.push(data) };
+    completionOutbox(options).enqueue(user, { workout_id: 'partial' });
+    state.workouts = [workout('partial', { health: { workout_id: 'hk-a', active_energy_kcal: 202 } })];
+    completionOutbox(options).flush(user);
+    assert.equal(deliveries.length, 0);
+    // The server restarts and the next document has only HR. Previously seen kcal survive.
+    state.workouts[0].health = { workout_id: 'hk-a', heart_rate_avg_bpm: 109, heart_rate_max_bpm: 134 };
+    completionOutbox(options).flush(user);
+    assert.deepEqual([deliveries[0].health.heart_rate_avg_bpm, deliveries[0].health.heart_rate_max_bpm,
+      deliveries[0].health.active_energy_kcal], [109, 134, 202]);
+
+    state.workouts = [workout('changed', { health: { workout_id: 'hk-a', queried_at: 100, active_energy_kcal: 202 } })];
+    const outbox = completionOutbox(options);
+    outbox.enqueue(user, { workout_id: 'changed', health: state.workouts[0].health });
+    outbox.enqueue(user, { workout_id: 'changed', health: { workout_id: 'hk-b', queried_at: 200,
+      heart_rate_avg_bpm: 120, heart_rate_max_bpm: 140 } });
+    assert.equal(deliveries.length, 1); // An older saved selection cannot overwrite the newer POST.
+    assert.equal(JSON.parse(fs.readFileSync(eventsPath(dir, 'u'))).pending['workout.completed:changed'].data.health.workout_id, 'hk-b');
+    state.workouts[0].health = { workout_id: 'hk-b', queried_at: 300, active_energy_kcal: 250 };
+    outbox.flush(user);
+    assert.equal(deliveries.length, 2);
+    assert.deepEqual([deliveries[1].health.workout_id, deliveries[1].health.heart_rate_avg_bpm,
+      deliveries[1].health.active_energy_kcal], ['hk-b', 120, 250]);
+
+    state.workouts = [];
+    outbox.enqueue(user, { workout_id: 'unreadable' });
+    state = Symbol('unreadable');
+    completionOutbox({ ...options, now: () => 100_000 }).flush(user);
+    assert.equal(deliveries.length, 2);
+    state = { workouts: [] };
+    completionOutbox({ ...options, now: () => 100_000 }).flush(user);
+    assert.equal(deliveries.length, 3);
+    assert.equal(deliveries[2].health, undefined);
+
+    fs.writeFileSync(eventsPath(dir, 'u'), JSON.stringify({ keys: {}, pending: {
+      'workout.completed:corrupt': { data: { workout_id: 'corrupt' } },
+    } }));
+    assert.throws(() => outbox.flush(user), /Invalid pending/);
+    assert.equal(deliveries.length, 3);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

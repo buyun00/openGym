@@ -1,5 +1,17 @@
 # 个人 iOS 训练事件（2026-10-27）
 
+## 2026-11-03：首次完成通知等待健康数据
+
+此前 POST 完成事件和 PUT 训练同步各自先认领、后投递；先到的快照缺心率时，后续同步虽保存了健康数据，也会被去重，Lumi 收到的首条通知仍缺指标。
+
+现在两路先进入同一个持久化完成队列，发送前读取最新已保存训练，合并同一手选 HealthKit 运动的部分指标。平均心率、最高心率、活动热量齐全即发送；否则默认等待 60 秒，按秒检查，到期只发送一次已有数据，不伪造零值、不再发送补充完成通知。`WORKOUT_COMPLETION_HEALTH_WAIT_MS` 可调整等待，范围 100–120000 毫秒。重试不延长原截止时间，进程重启恢复待发记录；其他实时事件写入去重文件不会抹掉待发完成事件。旧历史不因启动扫描而重发，账户删除沿用原事件文件清理。
+
+iOS 保存手选运动前每两秒重读同一 HKWorkout，查询与睡眠共用最多 20 秒预算；超时的重试保留此前读到的指标，取消后不保存。列表预览仍只读一次，没有自动匹配或后台补挂；明确跳过仍清空本次 health。网页完成事件也携带已有 health，服务端会保留比同步快照更新、更完整的所选指标，且不混合不同运动 ID。
+
+本轮验证：38 项完成事件、HealthKit、个人凭据及原生同步专项测试通过，包含本地 HTTP → SMTP/Webhook 的首次投递复现、两种到达顺序、重启恢复、部分指标合并、手选记录替换、原截止时间和不重复投递。Swift/Xcode 工程静态检查见 [本轮报告](workout-completion-static-checks-2026-11-03.json)，全部通过；当前 Windows 未执行 Swift 类型检查、XCTest、Xcode 编译或真机 HealthKit 验收。完整 API 与原生桥接回归为 647 项中的 620 项通过，27 项失败均可在未修改的 HEAD 复现，涉及既有日期样例、Windows 文件权限及 API 文档覆盖问题。
+
+HTTP 202 表示已接收（`pending: true` 表示仍在等待），不保证下游成功。已有先认领后投递及 webhook 有限重试语义保持不变。手机需从新源码重新构建安装才能使用所选运动重读；服务端更新可先修复 POST/PUT 的到达竞态。以下为 2026-10-27 的原交付记录。
+
 个人包的训练界面是原生 Swift，未运行网页 workout-events 订阅；GymSyncBridge 是 JavaScriptCore 数据适配器，不是 Capacitor WebView 事件桥。此前个人 Bearer 凭证仅允许数据同步路由，两处共同导致训练中没有事件。此次无需 feature flag。
 
 - `GymCloudSync.persistLocal` 比较保存前后的原生快照，借助 `GymSyncBridge.workoutEvents` 生成 `{type,data,event_id}`。服务端仍生成 `{id,type,occurred_at,user,data}` 信封，身份取自已验证凭证。

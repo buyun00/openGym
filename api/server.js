@@ -37,7 +37,7 @@ import { stampPut } from './sync-stamps.js';
 import * as bodyHook from './body-hook.js';
 import * as wh from './workout-webhook.js';
 import * as wmail from './workout-email.js';
-import { claimClientEvent, claimEvent, completedEventKey, completedPayload, eventsPath, newlyCompletedWorkouts } from './workout-sync-events.js';
+import { claimClientEvent, completionOutbox, completedPayload, eventsPath, newlyCompletedWorkouts } from './workout-sync-events.js';
 import * as equip from './equipment.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
@@ -1958,19 +1958,28 @@ function deliverWorkoutEvent(user, type, data) {
   if (wmail.emailConfig().to) wmail.emailEvent(ev).catch(e => console.error('[email]', e));
   return ev;
 }
-// A completed workout that was not on disk before this PUT. The personal iOS app syncs only
-// the document, so this is the path that reaches WORKOUT_EMAIL_TO. Claiming the workout id
-// first means the web client's POST /api/events for the same id does not send a second copy.
+// Both POST and PUT completion signals enter one durable hold. Missing health waits briefly
+// for HealthKit's batch upload; mail and webhook use the same enriched first payload.
 // A profile that already holds its history does not mail it again. A write that introduces
 // every past session at once (an empty file, a restore) mails each of those ids once.
+const completions = completionOutbox({ dir: DATA,
+  waitMs: Math.max(100, Math.min(120_000, Number(process.env.WORKOUT_COMPLETION_HEALTH_WAIT_MS) || 60_000)),
+  readState: uid => readStateStrict(uid) ?? {}, deliver: deliverWorkoutEvent });
+function flushCompletions() {
+  if (!wh.config().url && !wmail.emailConfig().to) return;
+  for (const user of db.users) {
+    try { completions.flush(user); } catch (e) { console.error('[events] pending completion', e); }
+  }
+}
+// Pending completions survive restart; existing saved history is never replayed.
+setInterval(flushCompletions, 1000).unref();
 function noteSyncedWorkouts(user, prev, next) {
   if (!wh.config().url && !wmail.emailConfig().to) return;
   for (const w of newlyCompletedWorkouts(prev, next)) {
-    const key = completedEventKey(w.id);
-    if (!key || !claimEvent(DATA, user.id, key)) continue;
     console.log(`[events] workout.completed ${w.id} via sync`);
-    deliverWorkoutEvent(user, 'workout.completed', completedPayload(w, next));
+    completions.enqueue(user, completedPayload(w, next));
   }
+  completions.flush(user);
 }
 const routes = {
   // 503 rather than a flag in a 200: the container healthcheck is `wget --spider`, which reads
@@ -2514,7 +2523,11 @@ const routes = {
     const hookOn = !!wh.config().url, mailOn = !!wmail.emailConfig().to;
     if (!hookOn && !mailOn) return json(res, 202, { ok: true, delivered: false, reason: 'disabled' });
     const data = body.data && typeof body.data === 'object' ? body.data : {};
-    // Shared with noteSyncedWorkouts: the sync write and this post are one notification.
+    if (body.type === 'workout.completed') {
+      const result = completions.enqueue(user, data);
+      return json(res, result.invalid ? 400 : 202, result.invalid ? { error: 'workout_id required' } : { ok: true, ...result });
+    }
+    // Stable transport keys deduplicate retries of the live start/exercise events.
     if (!claimClientEvent(DATA, user.id, body.type, data, undefined, body.event_id)) return json(res, 202, { ok: true, duplicate: true });
     const ev = deliverWorkoutEvent(user, body.type, data);
     json(res, 202, { ok: true, id: ev.id });

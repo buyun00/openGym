@@ -67,7 +67,7 @@ struct WorkoutHealthPicker: View {
                 Button("刷新列表") { operation = Task { await load() } }
                     .disabled(loading)
             }
-            if busy { ProgressView("读取所选运动并保存…") }
+            if busy { ProgressView("等待所选运动的心率和能量同步并保存…") }
         }
         .navigationTitle(importing ? "上传健康运动" : finishing ? "选择运动并结束" : "上传本次运动")
         .navigationBarTitleDisplayMode(.inline)
@@ -117,7 +117,7 @@ struct WorkoutHealthPicker: View {
         operation = Task {
             defer { busy = false }
             do {
-                let health = try await reader.read(workout)
+                let health = try await reader.readForCompletion(workout)
                 guard !Task.isCancelled else { return }
                 let saved: Bool
                 if importing {

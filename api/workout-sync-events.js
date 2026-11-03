@@ -9,7 +9,7 @@
 // and a start inferred from a field the document does not store would fire again on every sync.
 //
 // One workout id is mailed once. The web client usually posts the event and then pushes the
-// same id; whichever request claims the key first sends, and the other does not.
+// same id; both requests feed one durable completion hold before claiming delivery.
 import fs from 'node:fs';
 import path from 'node:path';
 import { atomicWrite } from './durable.js';
@@ -32,13 +32,22 @@ export function completedEventKey(id) {
   return 'workout.completed:' + id;
 }
 
-function readKeys(file) {
+function readRecord(file) {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const raw = parsed && parsed.keys;
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-    return raw;
-  } catch { return {}; }
+    const object = v => v && typeof v === 'object' && !Array.isArray(v);
+    if (!object(parsed) || !object(parsed.keys) || (parsed.pending != null && !object(parsed.pending))) {
+      throw new Error('Invalid workout event record');
+    }
+    for (const [key, item] of Object.entries(parsed.pending || {})) {
+      if (!object(item) || !object(item.data) || completedEventKey(item.data.workout_id) !== key ||
+          !Number.isFinite(item.due) || item.due < 0) throw new Error('Invalid pending workout completion');
+    }
+    return { keys: parsed.keys, pending: parsed.pending || {} };
+  } catch (e) {
+    if (e.code === 'ENOENT') return { keys: {}, pending: {} };
+    throw e; // An unreadable outbox must never become an empty deduplication record.
+  }
 }
 
 // True the first time `key` is claimed for this profile. The file is the record, so a later
@@ -47,7 +56,7 @@ function readKeys(file) {
 export function claimEvent(dir, uid, key, now = Date.now(), max = MAX_KEYS) {
   if (!dir || !uid || !key) return false;
   const file = eventsPath(dir, uid);
-  const keys = readKeys(file);
+  const record = readRecord(file), keys = record.keys;
   if (Object.prototype.hasOwnProperty.call(keys, key)) return false;
   keys[key] = now;
   const names = Object.keys(keys);
@@ -55,8 +64,76 @@ export function claimEvent(dir, uid, key, now = Date.now(), max = MAX_KEYS) {
     names.sort((a, b) => (Number(keys[a]) || 0) - (Number(keys[b]) || 0));
     for (const old of names.slice(0, names.length - max)) delete keys[old];
   }
-  atomicWrite(file, JSON.stringify({ keys }), 0o600);
+  atomicWrite(file, JSON.stringify({ ...record, keys }), 0o600);
   return true;
+}
+
+// Both completion ingress paths share this durable hold. Resolve against the latest saved
+// workout before the FIRST mail/webhook, rather than claiming an incomplete snapshot forever.
+// A genuine workout without readable health still gets one completion after the bounded grace.
+export function completionOutbox({ dir, readState, deliver, waitMs = 60_000, now = Date.now }) {
+  function mergeHealth(previous, next) {
+    if (!previous) return next;
+    if (!next) return previous;
+    const old = completedHealthFields({ health: previous }).health;
+    const fresh = completedHealthFields({ health: next }).health;
+    if (!old) return fresh;
+    if (!fresh) return old;
+    // A changed explicit selection must not borrow metrics from a different HKWorkout.
+    const previousIsNewer = old.queried_at != null && fresh.queried_at != null && old.queried_at > fresh.queried_at;
+    if (old.workout_id !== fresh.workout_id && (old.workout_id || fresh.workout_id)) return previousIsNewer ? old : fresh;
+    const [earlier, later] = previousIsNewer ? [fresh, old] : [old, fresh];
+    const merged = { ...earlier, ...Object.fromEntries(Object.entries(later).filter(([, v]) => v != null)) };
+    if (merged.heart_rate_avg_bpm != null || merged.heart_rate_max_bpm != null || merged.active_energy_kcal != null) merged.status = 'available';
+    return merged;
+  }
+  const ready = data => {
+    const h = completedHealthFields(data).health;
+    return h?.heart_rate_avg_bpm > 0 && h?.heart_rate_max_bpm > 0 && h?.active_energy_kcal != null;
+  };
+  function flush(user) {
+    const file = eventsPath(dir, user.id), record = readRecord(file);
+    if (!Object.keys(record.pending).length) return;
+    const state = readState(user.id);
+    if (!state || typeof state !== 'object') return; // Retry unreadable state; never lose health.
+    let dirty = false;
+    for (const [key, item] of Object.entries(record.pending)) {
+      const workout = workoutsOf(state).find(w => completedId(w) === item.data.workout_id);
+      const data = workout ? { ...item.data, ...completedPayload(workout, state) } : { ...item.data };
+      // A POST may already have richer health than the document sync that raced it.
+      if (item.data.health || data.health) {
+        data.health = mergeHealth(item.data.health, data.health);
+        data.health = completedHealthFields(data).health;
+      }
+      // Keep partial readings seen in a later PUT even if another partial snapshot follows it.
+      if (JSON.stringify(data) !== JSON.stringify(item.data)) { item.data = data; dirty = true; }
+      if (!ready(data) && now() < item.due) continue;
+      delete record.pending[key];
+      dirty = true;
+      if (Object.hasOwn(record.keys, key)) continue;
+      record.keys[key] = now();
+      const names = Object.keys(record.keys).sort((a, b) => record.keys[a] - record.keys[b]);
+      for (const old of names.slice(0, Math.max(0, names.length - MAX_KEYS))) delete record.keys[old];
+      atomicWrite(file, JSON.stringify(record), 0o600);
+      dirty = false;
+      deliver(user, 'workout.completed', data);
+    }
+    if (dirty) atomicWrite(file, JSON.stringify(record), 0o600);
+  }
+  function enqueue(user, data) {
+    const key = completedEventKey(data.workout_id);
+    if (!key) return { invalid: true };
+    const file = eventsPath(dir, user.id), record = readRecord(file);
+    if (Object.hasOwn(record.keys, key)) return { duplicate: true };
+    const old = record.pending[key];
+    record.pending[key] = { due: old?.due ?? now() + waitMs,
+      data: { ...old?.data, ...data, ...((old?.data.health || data.health) ?
+        { health: mergeHealth(old?.data.health, data.health) } : {}) } };
+    atomicWrite(file, JSON.stringify(record), 0o600);
+    flush(user);
+    return { pending: !!readRecord(file).pending[key] };
+  }
+  return { enqueue, flush };
 }
 
 // POST /api/events. Events we cannot key (no workout id, or not a completion) send as they

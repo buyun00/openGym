@@ -94,6 +94,7 @@ function step(prev, A, S) {
       started_at: w.start, ended_at: end, duration_min: r1((end - w.start) / 60000),
       body_weight_kg: kg(w.bw, S) ?? null,
       totals: totals(exs), exercises: exs,
+      ...(w.health ? { health: w.health } : {}),
     })
   }
 }
