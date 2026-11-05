@@ -13,6 +13,16 @@ name: Publish Docker images
 on:
   push:
     branches: [main]
+    paths:
+      - 'api/**'
+      - 'web/**'
+      - 'frontend/**'
+      - '!frontend/ios/**'
+      - '!frontend/android/**'
+      - '!frontend/capacitor.config.json'
+      - 'catalogue/media/**'
+      - '.dockerignore'
+      - '.github/workflows/docker-publish.yml'
   release:
     types: [published]
   workflow_dispatch:

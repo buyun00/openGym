@@ -31,6 +31,7 @@ unless tests
 end
 tests.build_configurations.each do |config|
   config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'org.lin0.lingym.navigationtests'
+  config.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
   config.build_settings['SWIFT_VERSION'] = '5.0'
   config.build_settings['TEST_TARGET_NAME'] = 'App'
