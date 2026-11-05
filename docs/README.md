@@ -35,6 +35,7 @@ All settings live in `.env`; [`.env.example`](../.env.example) explains each one
 | Guide | Read it when |
 |---|---|
 | [Contributing](../CONTRIBUTING.md) | Before your first pull request: setup, guidelines, what CI checks |
+| [iOS TestFlight setup](dev/IOS_TESTFLIGHT_SETUP.md) | Configure Apple signing and GitHub Actions for the personal iOS app |
 | [CLAUDE.md](../CLAUDE.md) | You want the architecture in one page (written for Claude Code, useful for people too) |
 | [HTTP API](API.md) | You're touching routes; the OpenAPI spec is the source of truth |
 | [Roadmap](../ROADMAP.md) | You want to know what's planned and where your idea fits |

@@ -13,13 +13,19 @@ struct WorkoutExerciseOptions: View {
             List {
                 if let exercise {
                     Section {
-                        NavigationLink("动作说明", systemImage: "info.circle") { instructions(exercise) }
-                        NavigationLink("历史记录", systemImage: "clock.arrow.circlepath") { WorkoutExerciseHistory(exerciseId: exercise.exerciseId) }
-                        NavigationLink("动作备注", systemImage: "note.text") {
+                        NavigationLink { instructions(exercise) } label: {
+                            Label("动作说明", systemImage: "info.circle")
+                        }
+                        NavigationLink { WorkoutExerciseHistory(exerciseId: exercise.exerciseId) } label: {
+                            Label("历史记录", systemImage: "clock.arrow.circlepath")
+                        }
+                        NavigationLink {
                             WorkoutTextEditor(title: "动作备注", initial: exercise.note ?? "") { text in
                                 store.updateWorkoutExercise(exerciseId) { $0.note = text.isEmpty ? nil : text }
                                 if store.saveError == nil { dismiss() }
                             }
+                        } label: {
+                            Label("动作备注", systemImage: "note.text")
                         }
                         Toggle("下次显示此备注", isOn: Binding(get: { self.exercise?.notePinned == true }, set: { value in store.updateWorkoutExercise(exerciseId) { $0.notePinned = value } }))
                     }
