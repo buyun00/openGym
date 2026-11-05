@@ -70,6 +70,7 @@ if [ "${#IPAS[@]}" -ne 1 ]; then
   echo 'Expected exactly one exported IPA' >&2
   exit 1
 fi
+python3 scripts/ios/report-package-size.py "${IPAS[0]}"
 API_PRIVATE_KEYS_DIR="$SIGNING_DIR" xcrun altool --upload-app --type ios \
   --file "${IPAS[0]}" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 echo 'Upload accepted. Apple processing/export-compliance and internal TestFlight group availability still need confirmation in App Store Connect.' >> "$GITHUB_STEP_SUMMARY"

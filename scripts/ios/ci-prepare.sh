@@ -5,7 +5,8 @@ npm ci --prefix frontend
 (
   cd frontend
   VITE_MOBILE=1 npm run build
-  node ../scripts/catalogue/stage-media.mjs dist
+  # Native iOS reads App.app/media, copied by Xcode from catalogue/media.
+  # Do not also stage the same offline library into the legacy web bundle.
   npx cap sync ios
 )
 # Check only iOS and dist; Android is not built in this workflow.
