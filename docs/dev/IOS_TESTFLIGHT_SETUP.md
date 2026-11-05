@@ -1,5 +1,13 @@
 # Lin Gym：GitHub Actions → TestFlight 内部测试
 
+## 首次发布验证（2026-11-05）
+
+- 开发团队、Distribution 证书/P12、两个描述文件、App Store Connect API Key 和个人同步 Secret 均已配置。
+- 主应用 `org.lin0.lingym`，小组件 `org.lin0.lingym.widgets`，共享组 `group.org.lin0.lingym`。
+- [首次成功发布任务](https://github.com/buyun00/openGym/actions/runs/41958660791)：版本 **1.0.0 (9.1)**，54 项 Swift 核心测试及 6 项签名配置测试通过，签名归档、IPA 导出和 Apple 上传成功。
+- 首次上传因缺少 `NSHealthUpdateUsageDescription` 被拒，已补充符合当前只读 HealthKit 行为的说明，重建后上传通过。
+- 上传成功不代表处理完成或真机验收通过。需在 TestFlight 确认 Apple 处理/出口合规状态，将构建加入 Personal 内部测试组，再接受邀请安装。
+
 此流程服务于当前个人版 Lin Gym。应用内包含个人数据同步凭据，只把你自己的账号加入内部测试组。导出启用 `testFlightInternalTestingOnly`，不支持外部测试或直接提交正式商店；将来开放给别人前，需要改为每人独立登录。
 
 ## 已配置的自动化
