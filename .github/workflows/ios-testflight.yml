@@ -1,0 +1,152 @@
+name: iOS TestFlight
+
+on:
+  push:
+    branches: [main]
+    tags: ['ios-v*']
+    paths:
+      - 'frontend/**'
+      - 'catalogue/**'
+      - 'scripts/ios/**'
+      - 'scripts/catalogue/**'
+      - '.github/workflows/ios-testflight.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'catalogue/**'
+      - 'scripts/ios/**'
+      - 'scripts/catalogue/**'
+      - '.github/workflows/ios-testflight.yml'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Sign and upload to internal TestFlight (requires Apple secrets)'
+        type: boolean
+        default: false
+      version:
+        description: 'App version, e.g. 1.0.0 (blank uses current Xcode version)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      RELEASE: ${{ (github.event_name == 'workflow_dispatch' && inputs.upload) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ios-v')) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Select stable Xcode 26
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_PATH=$(python3 - <<'PY'
+          import glob, re
+          versions = []
+          for path in glob.glob('/Applications/Xcode_26*.app'):
+              match = re.fullmatch(r'/Applications/Xcode_(26(?:\.\d+)+)\.app', path)
+              if match:
+                  versions.append((tuple(map(int, match[1].split('.'))), path))
+          if not versions:
+              raise SystemExit('No stable Xcode 26 installed on this runner')
+          print(max(versions)[1])
+          PY
+          )
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
+          pod --version
+      - name: Check release configuration
+        if: env.RELEASE == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_WIDGET_PROFILE_BASE64: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          IOS_PERSONAL_CONNECTION_JSON: ${{ secrets.IOS_PERSONAL_CONNECTION_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          names = ['APPLE_TEAM_ID', 'IOS_DISTRIBUTION_P12_BASE64', 'IOS_DISTRIBUTION_P12_PASSWORD',
+                   'IOS_APP_PROFILE_BASE64', 'IOS_WIDGET_PROFILE_BASE64', 'ASC_KEY_ID',
+                   'ASC_ISSUER_ID', 'ASC_PRIVATE_KEY', 'IOS_PERSONAL_CONNECTION_JSON']
+          missing = [name for name in names if not os.environ.get(name)]
+          if missing:
+              raise SystemExit('Missing GitHub configuration: ' + ', '.join(missing))
+          PY
+      - name: Prepare native dependencies and web resources
+        run: bash scripts/ios/ci-prepare.sh
+      - name: Validate signing helper
+        run: python3 -B scripts/ios/test_ci_signing.py
+      - name: Run Swift core tests
+        run: swift test --package-path frontend/ios
+      - name: Prepare connection resource
+        env:
+          IOS_PERSONAL_CONNECTION_JSON: ${{ env.RELEASE == 'true' && secrets.IOS_PERSONAL_CONNECTION_JSON || '' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path('frontend/ios/App/Private/GymPersonalConnection.json')
+          path.parent.mkdir(parents=True, exist_ok=True)
+          if os.environ['RELEASE'] == 'true':
+              try:
+                  data = json.loads(os.environ['IOS_PERSONAL_CONNECTION_JSON'])
+                  assert all(isinstance(data.get(k), str) and data[k] for k in ('base', 'token', 'userID', 'name'))
+                  assert data['base'].startswith('https://') and data['token'].startswith('ios:')
+              except Exception:
+                  raise SystemExit('Invalid IOS_PERSONAL_CONNECTION_JSON; contents are not logged')
+          else:
+              # Compile-only placeholder, no account access and never uploaded as an app.
+              data = {'base': 'https://example.invalid', 'token': '', 'userID': '', 'name': 'CI'}
+          path.write_text(json.dumps(data))
+          path.chmod(0o600)
+          PY
+      - name: Compile unsigned simulator app and widgets
+        if: env.RELEASE != 'true'
+        run: |
+          set -o pipefail
+          xcodebuild -workspace frontend/ios/App/App.xcworkspace -scheme App \
+            -configuration Release -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-derived" CODE_SIGNING_ALLOWED=NO \
+            build > "$RUNNER_TEMP/ios-build.log" 2>&1 || { tail -n 150 "$RUNNER_TEMP/ios-build.log"; exit 1; }
+          echo 'Unsigned iOS simulator build passed (App + GymWidgets).' >> "$GITHUB_STEP_SUMMARY"
+      - name: Sign, archive, and upload to internal TestFlight
+        if: env.RELEASE == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_WIDGET_PROFILE_BASE64: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          IOS_VERSION: ${{ inputs.version }}
+        run: bash scripts/ios/ci-release.sh
+      - name: Remove signing and personal material
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/opengym-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/opengym-signing.keychain-db"
+          fi
+          rm -f frontend/ios/App/Private/GymPersonalConnection.json
+          rm -rf "$RUNNER_TEMP/opengym-signing"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/opengym-ci-app.mobileprovision"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/opengym-ci-widget.mobileprovision"
+          # No IPA/archive artifact: this app embeds a personal synchronization credential.

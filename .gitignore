@@ -18,6 +18,7 @@ node_modules/
 *.log
 .DS_Store
 node_modules
+__pycache__/
 .claude/
 .agents/
 .superpowers/
