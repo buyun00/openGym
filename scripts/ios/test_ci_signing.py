@@ -22,7 +22,7 @@ class SigningTests(unittest.TestCase):
             self.profiles[kind] = dict(
                 TeamIdentifier=['ABCDEFGHIJ'], UUID=kind + '-uuid',
                 ExpirationDate=datetime.datetime.now() + datetime.timedelta(days=30),
-                Entitlements={'application-identifier': 'ABCDEFGHIJ.org.lin0.opengym' + suffix,
+                Entitlements={'application-identifier': 'ABCDEFGHIJ.org.lin0.lingym' + suffix,
                               'com.apple.security.application-groups': ['group.org.lin0.lingym'],
                               'com.apple.developer.healthkit': kind == 'app', 'get-task-allow': False})
 
@@ -35,13 +35,13 @@ class SigningTests(unittest.TestCase):
         self.run_prepare()
         export = plistlib.loads(self.root.joinpath('ExportOptions.plist').read_bytes())
         self.assertTrue(export['testFlightInternalTestingOnly'])
-        self.assertEqual(export['provisioningProfiles']['org.lin0.opengym.widgets'], 'widget-uuid')
+        self.assertEqual(export['provisioningProfiles']['org.lin0.lingym.widgets'], 'widget-uuid')
         import json
         settings = json.loads(self.root.joinpath('settings.json').read_text())
         self.assertEqual((settings['version'], settings['build']), ('1.2.3', '12.2'))
 
     def test_wrong_widget_profile(self):
-        self.profiles['widget']['Entitlements']['application-identifier'] = 'ABCDEFGHIJ.org.lin0.opengym'
+        self.profiles['widget']['Entitlements']['application-identifier'] = 'ABCDEFGHIJ.org.lin0.lingym'
         with self.assertRaisesRegex(ValueError, 'widget: profile must belong'):
             self.run_prepare()
 

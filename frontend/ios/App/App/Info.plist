@@ -5,7 +5,7 @@
     <key>NSSupportsLiveActivities</key><true/>
     <key>CFBundleURLTypes</key>
     <array><dict>
-        <key>CFBundleURLName</key><string>org.lin0.opengym</string>
+        <key>CFBundleURLName</key><string>org.lin0.lingym</string>
         <key>CFBundleURLSchemes</key><array><string>opengym</string></array>
     </dict></array>
     <key>NSHealthShareUsageDescription</key>

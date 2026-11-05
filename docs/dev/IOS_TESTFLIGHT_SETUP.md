@@ -22,9 +22,9 @@
 进入 **Certificates, Identifiers & Profiles → Identifiers → +**。
 
 1. 选择 **App Groups**，Description 填 `openGym Shared`，Identifier 填 `group.org.lin0.lingym`，注册。
-2. 再点 +，选择 **App IDs → App**，Description 填 `openGym`，Explicit Bundle ID 填 `org.lin0.opengym`。
+2. 再点 +，选择 **App IDs → App**，Description 填 `openGym`，Explicit Bundle ID 填 `org.lin0.lingym`。
 3. 勾选 **HealthKit** 和 **App Groups**，注册后进入该 App ID 的 App Groups 配置，关联刚创建的组并保存。当前只使用普通 HealthKit，不启用 Clinical Health Records。
-4. 再创建一个 App ID：Description `openGym Widgets`，Explicit Bundle ID `org.lin0.opengym.widgets`；勾选 App Groups，关联同一组。
+4. 再创建一个 App ID：Description `openGym Widgets`，Explicit Bundle ID `org.lin0.lingym.widgets`；勾选 App Groups，关联同一组。
 
 若提示标识已占用，先核对是不是当前团队已有条目；不要随意改一个值继续。工程、描述文件、Swift 共享容器和工作流需要一起调整。
 
@@ -41,8 +41,8 @@
 
 **Profiles → + → Distribution → App Store Connect**（旧界面可能叫 App Store）。
 
-1. 主应用：选择 `org.lin0.opengym` → 选择刚创建的 Apple Distribution 证书 → 名称 `openGym AppStore` → Generate → Download。
-2. 小组件：重复上述流程，App ID 选择 `org.lin0.opengym.widgets` → 同一证书 → 名称 `openGym Widgets AppStore` → Download。
+1. 主应用：选择 `org.lin0.lingym` → 选择刚创建的 Apple Distribution 证书 → 名称 `openGym AppStore` → Generate → Download。
+2. 小组件：重复上述流程，App ID 选择 `org.lin0.lingym.widgets` → 同一证书 → 名称 `openGym Widgets AppStore` → Download。
 
 两份都是 `.mobileprovision`。TestFlight 不需要登记手机 UDID。修改能力后必须重新生成描述文件。
 
@@ -53,7 +53,7 @@
 - Platforms：iOS。
 - Name：`Lin Gym`（如果重名，需要另外选择可用名称）。
 - Primary Language：Simplified Chinese。
-- Bundle ID：`org.lin0.opengym`。
+- Bundle ID：`org.lin0.lingym`。
 - SKU：例如 `opengym-ios-001`（自定义内部编号）。
 - User Access：按个人账号默认设置。
 

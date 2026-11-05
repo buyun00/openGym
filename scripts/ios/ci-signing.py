@@ -20,8 +20,8 @@ def prepare(root, env):
     # Run number + attempt makes retries distinct as well as subsequent workflow runs.
     build = f"{int(env['GITHUB_RUN_NUMBER'])}.{int(env['GITHUB_RUN_ATTEMPT'])}"
     mapping, targets = {}, {}
-    for kind, target, bundle in [('app', 'App', 'org.lin0.opengym'),
-                                  ('widget', 'GymWidgets', 'org.lin0.opengym.widgets')]:
+    for kind, target, bundle in [('app', 'App', 'org.lin0.lingym'),
+                                  ('widget', 'GymWidgets', 'org.lin0.lingym.widgets')]:
         with root.joinpath(kind + '.plist').open('rb') as file:
             profile = plistlib.load(file)
         entitlements = profile.get('Entitlements', {})

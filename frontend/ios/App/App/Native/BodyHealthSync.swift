@@ -14,7 +14,7 @@ private struct BodyHookConnection: Codable {
     var token: String
     static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "org.lin0.opengym.body-hook", kSecAttrAccount as String: "hook-v1"]
+         kSecAttrService as String: "org.lin0.lingym.body-hook", kSecAttrAccount as String: "hook-v1"]
     }
     static func load() throws -> Self? {
         var query = Self.query

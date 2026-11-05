@@ -17,7 +17,7 @@ private struct GymConnection: Codable {
 
 private enum GymKeychain {
     static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "org.lin0.opengym.sync", kSecAttrAccount as String: "connection-v1"]
+        kSecAttrService as String: "org.lin0.lingym.sync", kSecAttrAccount as String: "connection-v1"]
 
     static func load() throws -> GymConnection? {
         var q = query
