@@ -1,4 +1,4 @@
-# openGym：GitHub Actions → TestFlight 内部测试
+# Lin Gym：GitHub Actions → TestFlight 内部测试
 
 此流程服务于当前个人版 openGym。应用内包含个人数据同步凭据，只把你自己的账号加入内部测试组。导出启用 `testFlightInternalTestingOnly`，不支持外部测试或直接提交正式商店；将来开放给别人前，需要改为每人独立登录。
 
@@ -51,7 +51,7 @@
 打开 <https://appstoreconnect.apple.com/> → **Apps → + → New App**。
 
 - Platforms：iOS。
-- Name：可用的 openGym 名称（如果重名，可加个人后缀）。
+- Name：`Lin Gym`（如果重名，需要另外选择可用名称）。
 - Primary Language：Simplified Chinese。
 - Bundle ID：`org.lin0.opengym`。
 - SKU：例如 `opengym-ios-001`（自定义内部编号）。

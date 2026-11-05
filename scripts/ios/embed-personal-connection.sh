@@ -7,7 +7,9 @@ if [ ! -s "$source_file" ]; then
     echo 'error: Personal connection is missing. Run node scripts/ios/setup-personal-connection.mjs in the repository root, then build again.' >&2
     exit 1
 fi
-if ! /usr/bin/plutil -lint -s "$source_file" >/dev/null 2>&1; then
+# Conversion accepts the JSON produced by setup-personal-connection.mjs;
+# plutil -lint only accepts plist syntax. Never print the converted credential.
+if ! /usr/bin/plutil -convert xml1 -o - "$source_file" >/dev/null 2>&1; then
     echo 'error: Personal connection configuration is invalid. Run the personal setup again.' >&2
     exit 1
 fi

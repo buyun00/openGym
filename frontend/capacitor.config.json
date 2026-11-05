@@ -1,6 +1,6 @@
 {
   "appId": "org.lin0.opengym",
-  "appName": "openGym",
+  "appName": "Lin Gym",
   "webDir": "dist",
   "backgroundColor": "#0c0e12",
   "android": {
