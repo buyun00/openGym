@@ -36,7 +36,9 @@ for kind in app widget; do
 done
 
 # Per-target profiles: a global PROVISIONING_PROFILE_SPECIFIER would also affect Pods.
-ruby -rxcodeproj -rjson <<'RUBY'
+ruby -rjson <<'RUBY'
+gem 'xcodeproj', '1.27.0'
+require 'xcodeproj'
 config = JSON.parse(File.read(File.join(ENV.fetch('SIGNING_DIR'), 'settings.json')))
 project = Xcodeproj::Project.open('frontend/ios/App/App.xcodeproj')
 config.fetch('targets').each do |name, profile|

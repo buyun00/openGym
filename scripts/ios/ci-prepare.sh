@@ -16,11 +16,13 @@ if (problems.length) throw new Error(problems.join('\n'));
 JS
 # Explicit shared scheme, including the embedded widget dependency, for clean CI checkouts.
 gem install --user-install xcodeproj --version 1.27.0 --no-document
-ruby -rxcodeproj <<'RUBY'
+ruby <<'RUBY'
+gem 'xcodeproj', '1.27.0'
+require 'xcodeproj'
 project = Xcodeproj::Project.open('frontend/ios/App/App.xcodeproj')
 app = project.targets.find { |target| target.name == 'App' }
 abort 'Missing App target' unless app
 scheme = Xcodeproj::XCScheme.new
-scheme.configure_with_targets(app)
+scheme.configure_with_targets(app, nil)
 scheme.save_as(project.path, 'App', true)
 RUBY
