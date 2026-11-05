@@ -1,6 +1,6 @@
 # Lin Gym：GitHub Actions → TestFlight 内部测试
 
-此流程服务于当前个人版 openGym。应用内包含个人数据同步凭据，只把你自己的账号加入内部测试组。导出启用 `testFlightInternalTestingOnly`，不支持外部测试或直接提交正式商店；将来开放给别人前，需要改为每人独立登录。
+此流程服务于当前个人版 Lin Gym。应用内包含个人数据同步凭据，只把你自己的账号加入内部测试组。导出启用 `testFlightInternalTestingOnly`，不支持外部测试或直接提交正式商店；将来开放给别人前，需要改为每人独立登录。
 
 ## 已配置的自动化
 
@@ -21,10 +21,10 @@
 
 进入 **Certificates, Identifiers & Profiles → Identifiers → +**。
 
-1. 选择 **App Groups**，Description 填 `openGym Shared`，Identifier 填 `group.org.lin0.lingym`，注册。
-2. 再点 +，选择 **App IDs → App**，Description 填 `openGym`，Explicit Bundle ID 填 `org.lin0.lingym`。
+1. 选择 **App Groups**，Description 填 `Lin Gym Shared`，Identifier 填 `group.org.lin0.lingym`，注册。
+2. 再点 +，选择 **App IDs → App**，Description 填 `Lin Gym`，Explicit Bundle ID 填 `org.lin0.lingym`。
 3. 勾选 **HealthKit** 和 **App Groups**，注册后进入该 App ID 的 App Groups 配置，关联刚创建的组并保存。当前只使用普通 HealthKit，不启用 Clinical Health Records。
-4. 再创建一个 App ID：Description `openGym Widgets`，Explicit Bundle ID `org.lin0.lingym.widgets`；勾选 App Groups，关联同一组。
+4. 再创建一个 App ID：Description `Lin Gym Widgets`，Explicit Bundle ID `org.lin0.lingym.widgets`；勾选 App Groups，关联同一组。
 
 若提示标识已占用，先核对是不是当前团队已有条目；不要随意改一个值继续。工程、描述文件、Swift 共享容器和工作流需要一起调整。
 
@@ -41,8 +41,8 @@
 
 **Profiles → + → Distribution → App Store Connect**（旧界面可能叫 App Store）。
 
-1. 主应用：选择 `org.lin0.lingym` → 选择刚创建的 Apple Distribution 证书 → 名称 `openGym AppStore` → Generate → Download。
-2. 小组件：重复上述流程，App ID 选择 `org.lin0.lingym.widgets` → 同一证书 → 名称 `openGym Widgets AppStore` → Download。
+1. 主应用：选择 `org.lin0.lingym` → 选择刚创建的 Apple Distribution 证书 → 名称 `Lin Gym AppStore` → Generate → Download。
+2. 小组件：重复上述流程，App ID 选择 `org.lin0.lingym.widgets` → 同一证书 → 名称 `Lin Gym Widgets AppStore` → Download。
 
 两份都是 `.mobileprovision`。TestFlight 不需要登记手机 UDID。修改能力后必须重新生成描述文件。
 
@@ -64,7 +64,7 @@
 **Users and Access → Integrations → App Store Connect API → Team Keys**。
 
 1. 若首次使用显示 Request Access，由 Account Holder 申请 API 访问。
-2. 创建 `openGym GitHub Upload`，选择 **Developer** 角色（上传所需权限；创建应用、组和邀请在后台手动完成）。
+2. 创建 `Lin Gym GitHub Upload`，选择 **Developer** 角色（上传所需权限；创建应用、组和邀请在后台手动完成）。
 3. 下载 `.p8` 私钥（通常只能下载一次），记下 **Key ID** 和 **Issuer ID**。
 
 API Key 用于上传；它不能代替前面的 Distribution 签名证书。
@@ -97,10 +97,10 @@ Secrets 页添加：
 ## 8. 首次上传和安装
 
 1. Actions → **iOS TestFlight** → Run workflow → branch `main` → 勾选 upload → version 填 `1.0.0`。
-2. 等流程完成。到 App Store Connect → openGym → TestFlight 等 Apple 处理完成。
+2. 等流程完成。到 App Store Connect → Lin Gym → TestFlight 等 Apple 处理完成。
 3. 如显示 Missing Compliance，按真实加密使用情况回答出口合规问题；流程未擅自声明应用不使用非豁免加密。
 4. TestFlight → Internal Testing → +，创建 `Personal` 组，打开自动分发，添加你自己的开发者账号，并添加首次构建。
-5. iPhone 安装 Apple 的 TestFlight，接受邀请，安装 openGym，按需开启自动更新。当前工程要求 iOS 26 或更高。
+5. iPhone 安装 Apple 的 TestFlight，接受邀请，安装 Lin Gym，按需开启自动更新。当前工程要求 iOS 26 或更高。
 6. 真机检查：首次启动、个人数据同步、训练完成、HealthKit 授权及数据读取、小组件和 Live Activity。
 
 若上传构建时还没有测试组，创建组后手动加入该构建；后续自动分发。每个构建有效期 90 天。内部测试不等于 App Store 上架，也不等于业务/真机验收完成。
