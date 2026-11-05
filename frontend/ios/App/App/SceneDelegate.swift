@@ -25,6 +25,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
+        // Store the launch route before SwiftUI first evaluates the root view.
+        if let url = connectionOptions.urlContexts.first?.url { _ = GymRoutes.shared.receive(url) }
         switch windowScene.activationState {
         case .foregroundActive: lifecycle.phase = .active
         case .background: lifecycle.phase = .background
@@ -34,7 +36,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.rootViewController = UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle))
         self.window = window
         window.makeKeyAndVisible()
-        if let url = connectionOptions.urlContexts.first?.url { _ = GymRoutes.shared.receive(url) }
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) { lifecycle.phase = .active }

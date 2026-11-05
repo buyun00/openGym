@@ -24,18 +24,100 @@ private struct GymProvider: TimelineProvider {
 
 private struct WaterWidgetView: View {
     var entry: GymEntry
-    var total: Int { entry.data.waterDay == GymWidgetData.day(entry.date) ? entry.data.waterML : 0 }
+    @Environment(\.widgetFamily) private var family
+    var total: Int { entry.data.waterDay == GymWidgetData.day(entry.date) ? max(0, entry.data.waterML) : 0 }
+    private var goal: Int? { entry.data.waterGoal.flatMap { $0 > 0 ? $0 : nil } }
+    private var progress: Double { goal.map { min(Double(total) / Double($0), 1) } ?? 0 }
+    private var remaining: String {
+        guard let goal else { return "轻点设置每日目标" }
+        return total >= goal ? "今日目标已达成" : "距离目标还差 \(goal - total) mL"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("今日喝水", systemImage: "drop.fill").font(.headline).foregroundStyle(.cyan)
-            Text("\(total) mL").font(.title2.bold()).minimumScaleFactor(0.6)
-            if let goal = entry.data.waterGoal, goal > 0 {
-                ProgressView(value: min(Double(total) / Double(goal), 1)).tint(.cyan)
-                Text("目标 \(goal) mL").font(.caption).foregroundStyle(.secondary)
-            } else { Text("打开 App 设置目标").font(.caption).foregroundStyle(.secondary) }
+        HStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "drop.fill").foregroundStyle(.cyan).widgetAccentable()
+                    Text("今日喝水").foregroundStyle(.white.opacity(0.88))
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right").font(.caption2.weight(.bold)).foregroundStyle(.white.opacity(0.5))
+                }.font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 8)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(total, format: .number.grouping(.never))
+                        .font(.system(size: family == .systemMedium ? 42 : 34, weight: .bold, design: .rounded))
+                        .monospacedDigit().minimumScaleFactor(0.55).lineLimit(1)
+                    Text("mL").font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.65))
+                }
+                Text(goal.map { "每日目标 \($0) mL" } ?? "每一口，都是好习惯")
+                    .font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.65)).lineLimit(1)
+                Spacer(minLength: 8)
+                if let goal {
+                    GeometryReader { geometry in
+                        Capsule().fill(.white.opacity(0.15))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(LinearGradient(colors: [.cyan, .mint], startPoint: .leading, endPoint: .trailing))
+                                    .frame(width: geometry.size.width * progress)
+                            }
+                    }.frame(height: 5)
+                    HStack(spacing: 4) {
+                        Text(total >= goal ? "今日已达标" : "轻点记录喝水")
+                        Spacer(minLength: 0)
+                        Text("\(Int(progress * 100))%")
+                    }.font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8)).padding(.top, 7)
+                } else {
+                    Text(remaining).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
+                }
+            }
+            if family == .systemMedium {
+                ZStack {
+                    Circle().stroke(.white.opacity(0.12), lineWidth: 7)
+                    Circle().trim(from: 0, to: progress)
+                        .stroke(.cyan, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    VStack(spacing: 6) {
+                        Image(systemName: progress >= 1 ? "checkmark" : "drop.fill")
+                            .font(.system(size: 29, weight: .medium)).foregroundStyle(.cyan)
+                        Text(goal == nil ? "养成习惯" : "\(Int(progress * 100))%")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                }.frame(width: 96, height: 96).padding(.trailing, 4)
+            }
         }
-        .widgetURL(URL(string: "opengym://water"))
-        .containerBackground(.background, for: .widget)
+        .foregroundStyle(.white).padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .widgetURL(URL(string: "lingym://water"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("今日喝水 \(total) 毫升，\(remaining)。打开喝水页面")
+        .containerBackground(for: .widget) {
+            ZStack {
+                LinearGradient(colors: [Color(red: 0.04, green: 0.15, blue: 0.25), Color(red: 0.02, green: 0.27, blue: 0.38)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                WaterWidgetWave(level: 0.18 + progress * 0.27, phase: 0)
+                    .fill(.cyan.opacity(0.11))
+                WaterWidgetWave(level: 0.13 + progress * 0.27, phase: 1.8)
+                    .fill(.mint.opacity(0.09))
+            }
+        }
+    }
+}
+
+private struct WaterWidgetWave: Shape {
+    var level: Double
+    var phase: Double
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let baseline = rect.height * (1 - level)
+        path.move(to: CGPoint(x: 0, y: rect.height))
+        for step in 0...60 {
+            let fraction = Double(step) / 60
+            let x = rect.width * fraction
+            let y = baseline + sin(fraction * .pi * 2 + phase) * 7
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -93,7 +175,8 @@ private struct WeightWidgetView: View {
 struct WaterWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "OpenGymWater", provider: GymProvider()) { WaterWidgetView(entry: $0) }
-            .configurationDisplayName("今日喝水").description("随时查看喝水进度").supportedFamilies([.systemSmall])
+            .configurationDisplayName("今日喝水").description("查看每日饮水进度，轻点直接记录喝水")
+            .supportedFamilies([.systemSmall, .systemMedium]).contentMarginsDisabled()
     }
 }
 struct GoalWidget: Widget {

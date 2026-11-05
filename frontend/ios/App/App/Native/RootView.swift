@@ -7,6 +7,7 @@ struct RootView: View {
     @State private var keyboardVisible = false
     @State private var workoutPresented = false
     @State private var bodySyncPresented = false
+    @State private var routes = GymRoutes.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -21,9 +22,9 @@ struct RootView: View {
         }
         .ignoresSafeArea(.container)
         .environment(store)
-        .onChange(of: GymRoutes.shared.pending, initial: true) { _, _ in consumeRoute() }
+        .onChange(of: routes.pending, initial: true) { _, _ in consumeRoute() }
         .onChange(of: scenePhase) { _, _ in consumeRoute() }
-        .sheet(isPresented: $bodySyncPresented) {
+        .sheet(isPresented: $bodySyncPresented, onDismiss: { consumeRoute() }) {
             NavigationStack {
                 Form { BodySyncSettings() }
                     .navigationTitle("身体数据同步")
@@ -81,12 +82,16 @@ struct RootView: View {
     }
 
     private func consumeRoute() {
-        guard scenePhase == .active, let route = GymRoutes.shared.pending else { return }
-        if route == "sync-body" && workoutPresented {
-            store.tab = .body
-            return // Present the sync sheet only after the training cover finishes dismissing.
+        guard scenePhase == .active, let route = routes.pending else { return }
+        if route != "workout" && workoutPresented {
+            store.tab = route == "water" ? .water : .body
+            return // Keep the route until the training cover finishes dismissing.
         }
-        GymRoutes.shared.pending = nil
+        if bodySyncPresented {
+            bodySyncPresented = false
+            return // Route after the existing sheet has gone away.
+        }
+        routes.pending = nil
         switch route {
         case "workout": store.openToday()
         case "water": store.tab = .water
@@ -109,7 +114,7 @@ struct RootView: View {
         case .today: TodayView()
         case .plan: PlanView()
         case .body: BodyView()
-        case .water: WaterView()
+        case .water: WaterView().accessibilityIdentifier("water-page")
         case .workout: EmptyView() // Training is an action, never a UITabBarItem.
         }
     }

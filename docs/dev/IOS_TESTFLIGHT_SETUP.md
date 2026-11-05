@@ -13,13 +13,14 @@
 ## 已配置的自动化
 
 - 工作流：`.github/workflows/ios-testflight.yml`，GitHub Actions 中名称为 **iOS TestFlight**。
-- `main` 的相关代码提交、PR：macOS 26 + 已安装的最新稳定 Xcode 26，准备 Capacitor/CocoaPods 和媒体资源，执行 Swift 核心测试，编译未签名模拟器 App 和 Widget。无需 Apple 凭据。
+- `main` 的相关代码提交：自动运行核心测试和 iPhone 模拟器冷启动/后台恢复/旧小组件 URL 跳转测试，随后签名上传并等待内部测试分发。PR 只运行测试和未签名编译，不发布。
 - 手动 Run workflow：默认只检查；勾选 `upload` 才签名上传。`version` 可填 `1.0.0`，留空保留工程版本。
 - 推送 `ios-v1.0.0` 形式标签：自动签名上传。不要在配置好凭据前创建发布标签。
 - 主应用与 Widget 的构建号统一采用 `GitHub run number.attempt`，重跑也会递增。以后重命名/重建工作流时，要保证构建号高于 App Store Connect 已有版本。
 - 签名按 target 分别指定，不把描述文件应用到 Pods。检查团队、Bundle ID、有效期、分发类型、HealthKit、App Group。
 - 不上传 IPA/Archive 为 GitHub 附件，以免复制个人同步配置；GitHub 日志不打印该配置。临时签名材料在结束时清理。
-- GitHub 显示上传成功只表示 Apple 接收；仍需等 Apple 处理，并在 TestFlight 核实可安装状态。
+- 工作流上传后继续通过 Apple API 等待准确版本号和构建号，验证处理通过、出口合规状态和 `Personal` 内部组归属；必要时自动把构建加入现有组。不创建或邀请测试员。最多等待 30 分钟，超时会报出最后状态；此时不能把任务失败等同于上传失败，应先检查 Apple 后台。
+- `Info.plist` 已声明 `ITSAppUsesNonExemptEncryption=false`：当前使用系统 HTTPS/钥匙串，不包含非豁免加密功能。若未来引入其他加密实现，需重新核对声明。
 
 ## 1. 确认会员
 
@@ -115,7 +116,7 @@ Secrets 页添加：
 
 ## 日常更新
 
-修改代码 → 推送 main → 编译检查成功 → 手动勾选 upload（或推送 ios-v版本 标签）→ Apple 处理 → TestFlight 更新。服务端部署不属于此工作流。
+修改代码 → 推送 main → 自动测试、签名上传 → 等待 Apple 处理及 Personal 组分发 → TestFlight 可更新。手机可开启 TestFlight 自动更新，实际下载/安装时机由 iOS 控制，CI 不能保证立即安装。服务端部署不属于此工作流。
 
 ## 官方资料
 

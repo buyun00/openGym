@@ -10,7 +10,7 @@ final class GymRoutes {
     static let shared = GymRoutes()
     var pending: String?
     func receive(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "opengym", let host = url.host,
+        guard let scheme = url.scheme?.lowercased(), ["lingym", "opengym"].contains(scheme), let host = url.host?.lowercased(),
               ["workout", "water", "body", "sync-body"].contains(host) else { return false }
         pending = host
         return true
