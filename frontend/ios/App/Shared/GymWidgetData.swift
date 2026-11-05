@@ -22,7 +22,7 @@ struct GymWidgetData: Codable, Equatable {
         var done: Bool
         var active: Bool
     }
-    static let group = "group.org.lin0.opengym"
+    static let group = "group.org.lin0.lingym"
     static let key = "widget-snapshot-v1"
     var waterDay = ""
     var waterML = 0

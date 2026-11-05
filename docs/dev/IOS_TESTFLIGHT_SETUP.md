@@ -21,7 +21,7 @@
 
 进入 **Certificates, Identifiers & Profiles → Identifiers → +**。
 
-1. 选择 **App Groups**，Description 填 `openGym Shared`，Identifier 填 `group.org.lin0.opengym`，注册。
+1. 选择 **App Groups**，Description 填 `openGym Shared`，Identifier 填 `group.org.lin0.lingym`，注册。
 2. 再点 +，选择 **App IDs → App**，Description 填 `openGym`，Explicit Bundle ID 填 `org.lin0.opengym`。
 3. 勾选 **HealthKit** 和 **App Groups**，注册后进入该 App ID 的 App Groups 配置，关联刚创建的组并保存。当前只使用普通 HealthKit，不启用 Clinical Health Records。
 4. 再创建一个 App ID：Description `openGym Widgets`，Explicit Bundle ID `org.lin0.opengym.widgets`；勾选 App Groups，关联同一组。

@@ -34,7 +34,7 @@ def plist(path):
 
 main, widget = targets["App"], targets["GymWidgets"]
 app_sources, widget_sources = paths(main, "PBXSourcesBuildPhase"), paths(widget, "PBXSourcesBuildPhase")
-group = ["group.org.lin0.opengym"]
+group = ["group.org.lin0.lingym"]
 checks = {
     "swift_syntax": not errors,
     "valid_object_ids": all(len(key) == 24 for key in objects),

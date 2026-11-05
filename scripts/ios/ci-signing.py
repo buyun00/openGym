@@ -32,7 +32,7 @@ def prepare(root, env):
             raise ValueError(f'{kind}: requires an App Store Connect distribution profile')
         if profile['ExpirationDate'] <= datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None):
             raise ValueError(f'{kind}: provisioning profile has expired')
-        if 'group.org.lin0.opengym' not in entitlements.get('com.apple.security.application-groups', []):
+        if 'group.org.lin0.lingym' not in entitlements.get('com.apple.security.application-groups', []):
             raise ValueError(f'{kind}: profile must enable the shared App Group')
         if kind == 'app' and not entitlements.get('com.apple.developer.healthkit'):
             raise ValueError('app: profile must enable HealthKit')

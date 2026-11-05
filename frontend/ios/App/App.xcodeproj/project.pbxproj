@@ -599,7 +599,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
-				DEVELOPMENT_TEAM = W92FXKVT5P;
+				DEVELOPMENT_TEAM = 6Y29E7PSVF;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = org.lin0.opengym;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -620,7 +620,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				DEVELOPMENT_TEAM = W92FXKVT5P;
+				DEVELOPMENT_TEAM = 6Y29E7PSVF;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.lin0.opengym;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -635,7 +635,7 @@
  CODE_SIGN_STYLE = Automatic;
  CODE_SIGN_ENTITLEMENTS = GymWidgets/GymWidgets.entitlements;
  CURRENT_PROJECT_VERSION = 1;
- DEVELOPMENT_TEAM = W92FXKVT5P;
+ DEVELOPMENT_TEAM = 6Y29E7PSVF;
  INFOPLIST_FILE = GymWidgets/Info.plist;
  IPHONEOS_DEPLOYMENT_TARGET = 26.0;
  LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
@@ -651,7 +651,7 @@
  CODE_SIGN_STYLE = Automatic;
  CODE_SIGN_ENTITLEMENTS = GymWidgets/GymWidgets.entitlements;
  CURRENT_PROJECT_VERSION = 1;
- DEVELOPMENT_TEAM = W92FXKVT5P;
+ DEVELOPMENT_TEAM = 6Y29E7PSVF;
  INFOPLIST_FILE = GymWidgets/Info.plist;
  IPHONEOS_DEPLOYMENT_TARGET = 26.0;
  LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";

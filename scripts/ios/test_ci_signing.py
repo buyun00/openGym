@@ -23,7 +23,7 @@ class SigningTests(unittest.TestCase):
                 TeamIdentifier=['ABCDEFGHIJ'], UUID=kind + '-uuid',
                 ExpirationDate=datetime.datetime.now() + datetime.timedelta(days=30),
                 Entitlements={'application-identifier': 'ABCDEFGHIJ.org.lin0.opengym' + suffix,
-                              'com.apple.security.application-groups': ['group.org.lin0.opengym'],
+                              'com.apple.security.application-groups': ['group.org.lin0.lingym'],
                               'com.apple.developer.healthkit': kind == 'app', 'get-task-allow': False})
 
     def run_prepare(self):
