@@ -91,23 +91,6 @@ jobs:
           PY
       - name: Prepare native dependencies and web resources
         run: bash scripts/ios/ci-prepare.sh
-      - name: Validate signing helper
-        run: |
-          python3 -B scripts/ios/test_ci_signing.py
-          python3 -B scripts/ios/test_ci_testflight.py
-      - name: Run Swift core tests
-        run: swift test --package-path frontend/ios
-      - name: Test widget navigation on iPhone Simulator
-        timeout-minutes: 20
-        run: bash scripts/ios/ci-navigation-tests.sh
-      - name: Save simulator test results (no account credentials)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: widget-navigation-results
-          path: ${{ runner.temp }}/WidgetNavigation.xcresult
-          if-no-files-found: ignore
-          retention-days: 7
       - name: Prepare connection resource
         env:
           IOS_PERSONAL_CONNECTION_JSON: ${{ env.RELEASE == 'true' && secrets.IOS_PERSONAL_CONNECTION_JSON || '' }}

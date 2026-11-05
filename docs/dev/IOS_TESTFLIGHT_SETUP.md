@@ -13,7 +13,7 @@
 ## 已配置的自动化
 
 - 工作流：`.github/workflows/ios-testflight.yml`，GitHub Actions 中名称为 **iOS TestFlight**。
-- `main` 的相关代码提交：自动运行核心测试和 iPhone 模拟器冷启动/后台恢复/旧小组件 URL 跳转测试，随后签名上传并等待内部测试分发。PR 只运行测试和未签名编译，不发布。
+- `main` 的相关代码提交：直接打包、签名上传并等待内部测试分发，由用户在真机验收。发布工作流不运行核心、签名辅助程序或模拟器自动测试。PR 仅未签名编译，不发布。
 - 手动 Run workflow：默认只检查；勾选 `upload` 才签名上传。`version` 可填 `1.0.0`，留空保留工程版本。
 - 推送 `ios-v1.0.0` 形式标签：自动签名上传。不要在配置好凭据前创建发布标签。
 - 主应用与 Widget 的构建号统一采用 `GitHub run number.attempt`，重跑也会递增。以后重命名/重建工作流时，要保证构建号高于 App Store Connect 已有版本。
@@ -116,7 +116,7 @@ Secrets 页添加：
 
 ## 日常更新
 
-修改代码 → 推送 main → 自动测试、签名上传 → 等待 Apple 处理及 Personal 组分发 → TestFlight 可更新。手机可开启 TestFlight 自动更新，实际下载/安装时机由 iOS 控制，CI 不能保证立即安装。服务端部署不属于此工作流。
+修改代码 → 推送 main → 自动打包、签名上传 → 等待 Apple 处理及 Personal 组分发 → TestFlight 更新并真机验收。手机可开启 TestFlight 自动更新，实际下载/安装时机由 iOS 控制，CI 不能保证立即安装。服务端部署不属于此工作流。
 
 ## 官方资料
 
