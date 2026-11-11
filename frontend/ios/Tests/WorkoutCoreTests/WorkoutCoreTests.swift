@@ -24,6 +24,7 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertNil(value.exercises[0].sets[0].rir)
         XCTAssertNil(value.note)
         XCTAssertNil(value.restEndsAt)
+        XCTAssertNil(value.cardioTimer)
     }
 
     func testCardioRoundTripKeepsMinutesSpeedInclineAndNotes() throws {
@@ -40,6 +41,23 @@ final class WorkoutCoreTests: XCTestCase {
         value.restEndsAt = Date(timeIntervalSince1970: 999)
         XCTAssertEqual(try JSONDecoder().decode(WorkoutSession.self, from: JSONEncoder().encode(value)), value)
         XCTAssertEqual(WorkoutLogic.summary(entry.sets[0], mode: .cardio), "5 min @ 4.5 km/h · 坡度 2.5%")
+    }
+
+    func testCardioTimerSurvivesRestoreAndBelongsToAnUnfinishedSet() throws {
+        let entry = exercise()
+        var value = session([entry])
+        let timer = try XCTUnwrap(WorkoutLogic.cardioTimer(exercise: entry, setID: entry.sets[0].id, now: value.startedAt))
+        XCTAssertEqual(timer.end.timeIntervalSince(timer.start), 20 * 60)
+        value.cardioTimer = timer
+        let restored = try JSONDecoder().decode(WorkoutSession.self, from: JSONEncoder().encode(value))
+        XCTAssertEqual(WorkoutLogic.activeCardioTimer(in: restored), timer)
+        XCTAssertNil(WorkoutLogic.finished(restored, at: timer.end).cardioTimer)
+
+        value.exercises[0].sets[0].done = true
+        XCTAssertNil(WorkoutLogic.activeCardioTimer(in: value))
+        XCTAssertNil(WorkoutLogic.cardioTimer(exercise: value.exercises[0], setID: timer.setID, now: timer.end))
+        value.exercises[0].sets.removeAll()
+        XCTAssertNil(WorkoutLogic.activeCardioTimer(in: value))
     }
 
     func testMetricsRejectNonfiniteAndKeepUnsetInclineDistinctFromFlat() {

@@ -2,10 +2,22 @@ import Foundation
 import ActivityKit
 
 struct TrainingActivityAttributes: ActivityAttributes {
+    struct Countdown: Codable, Hashable {
+        enum Kind: String, Codable {
+            case rest, cardio
+        }
+
+        var kind: Kind
+        var start: Date
+        var end: Date
+        var interval: ClosedRange<Date> { min(start, end)...end }
+    }
+
     struct ContentState: Codable, Hashable {
         var exercise: String
         var completed: Int
         var total: Int
+        var countdown: Countdown? = nil
     }
     var sessionID: UUID
     var name: String

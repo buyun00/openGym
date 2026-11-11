@@ -207,10 +207,7 @@ struct ActiveWorkoutView: View {
         .onAppear { previousIdleDisabled = UIApplication.shared.isIdleTimerDisabled; updateAwake() }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = previousIdleDisabled ?? false }
         .onChange(of: store.workoutPreferences.keepAwake) { _, _ in updateAwake() }
-        .onChange(of: scenePhase) { _, phase in
-            updateAwake()
-            if phase == .active { store.refreshWorkoutAlerts() }
-        }
+        .onChange(of: scenePhase) { _, _ in updateAwake() }
         .onReceive(NotificationCenter.default.publisher(for: .workoutRestFinished)) { _ in
             guard store.workoutPreferences.flash, !reduceMotion, scenePhase == .active else { return }
             flashing = true

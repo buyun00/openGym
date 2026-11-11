@@ -1,12 +1,23 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                             willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        let request = notification.request
+        guard request.identifier == WorkoutRestAlerts.identifier else { return [.banner, .list, .sound, .badge] }
+        guard request.content.sound != nil,
+              let deadline = request.content.userInfo[WorkoutRestAlerts.deadlineKey] as? TimeInterval else { return [] }
+        let isCurrent = await WorkoutRestAlerts.shouldPresentInForeground(at: Date(timeIntervalSince1970: deadline))
+        return isCurrent ? .sound : []
     }
 
     // MARK: UISceneSession Lifecycle

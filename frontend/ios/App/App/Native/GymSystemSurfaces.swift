@@ -72,7 +72,6 @@ final class TrainingLiveActivity {
     private var desired: WorkoutSession?
     private var revision = 0
     private var worker: Task<Void, Never>?
-    private var previous: TrainingActivityAttributes.ContentState?
     private var lastUpdate = Date.distantPast
     private(set) var errorMessage: String?
 
@@ -96,13 +95,16 @@ final class TrainingLiveActivity {
         for activity in Activity<TrainingActivityAttributes>.activities where activity.attributes.sessionID != session?.id {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
-        guard let session, desired?.id == session.id else { previous = nil; return }
-        let exercise = session.exercises.first { $0.id == session.selectedExerciseId } ?? session.exercises.first
+        guard let session, desired == session else { return }
+        let countdown = countdown(for: session, now: .now)
+        let exercise = session.exercises.first { $0.id == countdown?.exerciseID }
+            ?? session.exercises.first { $0.id == session.selectedExerciseId }
+            ?? session.exercises.first
         let state = TrainingActivityAttributes.ContentState(exercise: exercise?.name ?? "选择动作开始训练",
-            completed: exercise?.sets.filter(\.done).count ?? 0, total: exercise?.sets.count ?? 0)
-        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(3600))
+            completed: exercise?.sets.filter(\.done).count ?? 0, total: exercise?.sets.count ?? 0, countdown: countdown?.value)
+        let content = ActivityContent(state: state, staleDate: state.countdown?.end)
         if let activity = Activity<TrainingActivityAttributes>.activities.first(where: { $0.attributes.sessionID == session.id }) {
-            guard state != previous else { return }
+            guard state != activity.content.state else { return }
             let delay = max(0, 1 - Date().timeIntervalSince(lastUpdate))
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             // A later event will be reconciled by the worker; do not send stale content.
@@ -117,7 +119,21 @@ final class TrainingLiveActivity {
                 errorMessage = nil
             } catch { errorMessage = error.localizedDescription; return }
         }
-        previous = state
         lastUpdate = Date()
+    }
+
+    private func countdown(for session: WorkoutSession, now: Date)
+        -> (value: TrainingActivityAttributes.Countdown, exerciseID: UUID?)? {
+        let cardio = WorkoutLogic.activeCardioTimer(in: session)
+        if let end = session.restEndsAt, end > now, (cardio?.end ?? .distantPast) <= now {
+            let owner = session.exercises.first { $0.id == session.restOwner }
+            let start = owner?.sets.first { $0.id == session.restSetOwner }?.completedAt
+                ?? max(session.startedAt, end.addingTimeInterval(-90))
+            return (.init(kind: .rest, start: start, end: end), session.restOwner)
+        }
+        if let cardio {
+            return (.init(kind: .cardio, start: cardio.start, end: cardio.end), cardio.exerciseID)
+        }
+        return nil
     }
 }

@@ -7,6 +7,7 @@ extension GymStore {
         guard var session = active else { return }
         let previous = session
         change(&session)
+        session.cardioTimer = WorkoutLogic.activeCardioTimer(in: session)
         active = session
         if !save() { active = previous }
         restEndsAt = active?.restEndsAt
@@ -118,8 +119,28 @@ extension GymStore {
     func adjustRest(by seconds: Int) {
         mutateActive { session in
             guard let end = session.restEndsAt else { return }
-            session.restEndsAt = max(Date(), end.addingTimeInterval(Double(seconds)))
+            let adjusted = end.addingTimeInterval(Double(seconds))
+            if adjusted > .now { session.restEndsAt = adjusted }
+            else { session.restEndsAt = nil; session.restOwner = nil; session.restSetOwner = nil }
         }
+    }
+
+    func startCardioTimer(exercise exerciseID: UUID, set setID: UUID) {
+        guard let exercise = active?.exercises.first(where: { $0.id == exerciseID }),
+              (exercise.mode ?? WorkoutCatalogue.records[exercise.exerciseId]?.mode) == .cardio,
+              let timer = WorkoutLogic.cardioTimer(exercise: exercise, setID: setID, now: .now) else { return }
+        mutateActive { session in
+            session.cardioTimer = timer
+            session.selectedExerciseId = exerciseID
+            session.restEndsAt = nil
+            session.restOwner = nil
+            session.restSetOwner = nil
+        }
+    }
+
+    func stopCardioTimer(_ timer: WorkoutCardioTimer) {
+        guard active?.cardioTimer == timer else { return }
+        mutateActive { $0.cardioTimer = nil }
     }
 
     func updateRoutineWorkoutFields(_ routineId: UUID, slotId: UUID, _ change: (inout RoutineExercise) -> Void) {

@@ -61,6 +61,23 @@ enum WorkoutMetric: String, CaseIterable {
 }
 
 enum WorkoutLogic {
+    static func cardioTimer(exercise: WorkoutExercise, setID: UUID, now: Date) -> WorkoutCardioTimer? {
+        guard exercise.mode == nil || exercise.mode == .cardio,
+              let set = exercise.sets.first(where: { $0.id == setID }), !set.done,
+              let minutes = set.minutes, minutes.isFinite, minutes > 0 else { return nil }
+        let duration = min(minutes, WorkoutMetric.minutes.maximum) * 60
+        return WorkoutCardioTimer(exerciseID: exercise.id, setID: setID, start: now,
+                                  end: now.addingTimeInterval(max(1, duration)))
+    }
+
+    static func activeCardioTimer(in session: WorkoutSession) -> WorkoutCardioTimer? {
+        guard session.finishedAt == nil, let timer = session.cardioTimer, timer.end > timer.start,
+              let exercise = session.exercises.first(where: { $0.id == timer.exerciseID }),
+              exercise.mode == nil || exercise.mode == .cardio,
+              exercise.sets.contains(where: { $0.id == timer.setID && !$0.done }) else { return nil }
+        return timer
+    }
+
     static func copy(_ set: WorkoutSet) -> WorkoutSet {
         var next = set
         next.id = UUID()
@@ -123,6 +140,7 @@ enum WorkoutLogic {
         result.restEndsAt = nil
         result.restOwner = nil
         result.restSetOwner = nil
+        result.cardioTimer = nil
         result.selectedExerciseId = nil
         return result
     }

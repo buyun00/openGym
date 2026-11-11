@@ -130,6 +130,7 @@ private struct WorkoutSetEditor: View {
                     }
                 }
             }
+            if mode == .cardio && !set.done { cardioControls }
             if set.done && store.workoutPreferences.effort != .none {
                 Picker("强度 \(store.workoutPreferences.effort.title)", selection: Binding<Int?>(get: { set.rir }, set: { store.setRIR(exercise: exercise.id, set: set.id, value: $0) })) {
                     Text("未记录").tag(Int?.none)
@@ -145,6 +146,39 @@ private struct WorkoutSetEditor: View {
             guard !Task.isCancelled, store.active?.exercises.first(where: { $0.id == exercise.id })?.sets.first(where: { $0.id == set.id })?.done == false else { return }
             timerEnd = nil
             store.toggleSet(exercise: exercise.id, set: set.id)
+        }
+    }
+
+    @ViewBuilder private var cardioControls: some View {
+        if let timer = store.active?.cardioTimer, timer.exerciseID == exercise.id, timer.setID == set.id {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                ViewThatFits(in: .horizontal) {
+                    HStack { cardioStatus(timer, now: context.date) }
+                    VStack(alignment: .leading) { cardioStatus(timer, now: context.date) }
+                }
+            }
+        } else {
+            Button("开始有氧计时", systemImage: "timer") {
+                store.startCardioTimer(exercise: exercise.id, set: set.id)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled((set.minutes ?? 0) <= 0)
+        }
+    }
+
+    @ViewBuilder private func cardioStatus(_ timer: WorkoutCardioTimer, now: Date) -> some View {
+        if now < timer.end {
+            Label("剩余 \(workoutClock(ceil(timer.end.timeIntervalSince(now))))", systemImage: "timer").monospacedDigit()
+            Button("停止计时") { store.stopCardioTimer(timer) }.buttonStyle(.bordered)
+        } else {
+            Text("有氧计时结束").foregroundStyle(.secondary)
+            Button("完成本组") { store.toggleSet(exercise: exercise.id, set: set.id) }.buttonStyle(.borderedProminent)
+            Button("重计", systemImage: "arrow.counterclockwise") {
+                store.startCardioTimer(exercise: exercise.id, set: set.id)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.bordered)
+            .disabled((set.minutes ?? 0) <= 0)
         }
     }
 

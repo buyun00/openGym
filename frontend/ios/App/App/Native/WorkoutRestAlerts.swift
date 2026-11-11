@@ -9,44 +9,76 @@ extension Notification.Name {
 
 @MainActor
 final class WorkoutRestAlerts {
-    private var sleeper: Task<Void, Never>?
-    private var scheduling: Task<Void, Never>?
-    private let identifier = "opengym.workout.rest"
+    nonisolated static let identifier = "opengym.workout.rest"
+    nonisolated static let deadlineKey = "restDeadline"
+    static var foregroundSince = Date.distantPast
 
-    func update(end: Date?, preferences: WorkoutPreferences, completed: @escaping @MainActor () -> Void) {
+    private static let soundName = "WorkoutRestChime.wav"
+    private static let chime: SystemSoundID? = {
+        guard let url = Bundle.main.url(forResource: soundName, withExtension: nil) else { return nil }
+        var id: SystemSoundID = 0
+        return AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError ? id : nil
+    }()
+
+    private var sleeper: Task<Void, Never>?
+    private var scheduling: Task<Bool, Never>?
+    private var deadline: Date?
+    private var sound = false
+    private var haptics = false
+
+    static func shouldPresentInForeground(at end: Date) -> Bool {
+        let lateness = Date().timeIntervalSince(end)
+        return UIApplication.shared.applicationState == .active
+            && end >= foregroundSince && lateness >= 0 && lateness < 2
+    }
+
+    func update(end: Date?, preferences: WorkoutPreferences, reschedule: Bool,
+                completed: @escaping @MainActor () -> Void) {
+        haptics = preferences.haptics
+        guard scheduling == nil || deadline != end || sound != preferences.sound || reschedule else { return }
+        let expired = deadline.map { $0 <= Date() } ?? false
+        deadline = end
+        sound = preferences.sound
         sleeper?.cancel()
+
+        // Clearing an elapsed timer must leave its one-shot system delivery intact.
+        if end == nil && expired { return }
         let previous = scheduling
         previous?.cancel()
-        scheduling = Task {
+        let delivery = Task {
             // A superseded add must finish before its replacement removes the old request.
-            await previous?.value
-            guard !Task.isCancelled else { return }
+            _ = await previous?.value
+            guard !Task.isCancelled else { return false }
             let center = UNUserNotificationCenter.current()
-            center.removePendingNotificationRequests(withIdentifiers: [identifier])
-            guard let end, end.timeIntervalSinceNow > 0 else { return }
-            let status = await center.notificationSettings().authorizationStatus
-            guard !Task.isCancelled, status == .authorized || status == .provisional else { return }
+            center.removePendingNotificationRequests(withIdentifiers: [Self.identifier])
+            guard let end, end.timeIntervalSinceNow > 0 else { return false }
+            let settings = await center.notificationSettings()
+            let remaining = end.timeIntervalSinceNow
+            guard !Task.isCancelled, remaining > 0,
+                  settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return false }
+            let usesSystemSound = preferences.sound && settings.authorizationStatus == .authorized && settings.soundSetting == .enabled
             let content = UNMutableNotificationContent()
             content.title = "休息结束"
             content.body = "准备好后开始下一组。"
-            if preferences.sound { content.sound = .default }
+            content.userInfo[Self.deadlineKey] = end.timeIntervalSince1970
+            if usesSystemSound { content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: Self.soundName)) }
             do {
-                try await center.add(UNNotificationRequest(identifier: identifier, content: content,
-                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, end.timeIntervalSinceNow), repeats: false)))
+                try await center.add(UNNotificationRequest(identifier: Self.identifier, content: content,
+                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: remaining, repeats: false)))
+                return usesSystemSound
             } catch {
-                // Foreground timer remains available even when the system rejects a notification.
+                return false
             }
         }
-        guard let end else { return }
-        sleeper = Task {
+        scheduling = delivery
+        guard let end, end.timeIntervalSinceNow > 0 else { return }
+        sleeper = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(max(0, end.timeIntervalSinceNow))) } catch { return }
-            guard !Task.isCancelled else { return }
-            // In the background the scheduled system notification owns delivery. Removing it
-            // from a waking in-process timer could race and suppress the lock-screen alert.
-            guard UIApplication.shared.applicationState == .active else { return }
-            if Date().timeIntervalSince(end) < 5 {
-                if preferences.sound { AudioServicesPlaySystemSound(1005) }
-                if preferences.haptics { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            let usesSystemSound = await delivery.value
+            guard !Task.isCancelled, let self, UIApplication.shared.applicationState == .active else { return }
+            if Self.shouldPresentInForeground(at: end) {
+                if preferences.sound && !usesSystemSound, let chime = Self.chime { AudioServicesPlaySystemSound(chime) }
+                if self.haptics { UINotificationFeedbackGenerator().notificationOccurred(.success) }
                 NotificationCenter.default.post(name: .workoutRestFinished, object: nil)
             }
             completed()

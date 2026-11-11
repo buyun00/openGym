@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct RootView: View {
-    @State private var store = GymStore()
+    let store: GymStore
     @State private var navigationTab: AppTab = .today
     @State private var keyboardVisible = false
     @State private var workoutPresented = false
@@ -10,6 +10,8 @@ struct RootView: View {
     @State private var routes = GymRoutes.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(store: GymStore) { self.store = store }
 
     var body: some View {
         NativeRootHost(selection: navigationTab, keyboardVisible: keyboardVisible,
@@ -48,6 +50,7 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            if let end = store.restEndsAt, end <= .now { store.clearRest() }
             store.wellness.activate()
             store.refreshSystemSurfaces()
             await store.cloud.sync(store: store)

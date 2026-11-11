@@ -12,9 +12,10 @@ private final class NativeSceneLifecycle: ObservableObject {
 
 private struct NativeSceneRoot: View {
     @ObservedObject var lifecycle: NativeSceneLifecycle
+    let store: GymStore
 
     var body: some View {
-        RootView().environment(\.scenePhase, lifecycle.phase)
+        RootView(store: store).environment(\.scenePhase, lifecycle.phase)
     }
 }
 
@@ -33,12 +34,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         default: lifecycle.phase = .inactive
         }
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle))
+        // The store owns workout alerts and must be created once per scene.
+        window.rootViewController = UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle, store: GymStore()))
         self.window = window
         window.makeKeyAndVisible()
     }
 
-    func sceneDidBecomeActive(_ scene: UIScene) { lifecycle.phase = .active }
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        WorkoutRestAlerts.foregroundSince = Date()
+        lifecycle.phase = .active
+    }
 
     func sceneWillResignActive(_ scene: UIScene) { lifecycle.phase = .inactive }
 

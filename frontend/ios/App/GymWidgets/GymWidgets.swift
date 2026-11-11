@@ -195,33 +195,110 @@ struct WeightWidget: Widget {
 struct TrainingActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TrainingActivityAttributes.self) { context in
-            HStack {
-                Image(systemName: "figure.strengthtraining.traditional").foregroundStyle(.orange)
-                VStack(alignment: .leading) {
-                    Text(context.attributes.name).font(.caption).foregroundStyle(.secondary)
-                    Text(context.state.exercise).font(.headline).lineLimit(2)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    activityIcon(context.state)
+                    VStack(alignment: .leading) {
+                        Text(context.attributes.name).font(.caption).foregroundStyle(.secondary)
+                        Text(context.state.exercise).font(.headline).lineLimit(2)
+                    }
+                    Spacer()
+                    status(context)
                 }
-                Spacer()
-                Text("\(context.state.completed)/\(context.state.total) 组").monospacedDigit()
+                countdownProgress(context)
             }
             .padding().widgetURL(URL(string: "opengym://workout"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: "figure.strengthtraining.traditional").foregroundStyle(.orange)
+                    activityIcon(context.state)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("\(context.state.completed)/\(context.state.total) 组").monospacedDigit()
+                    status(context)
                 }
-                DynamicIslandExpandedRegion(.bottom) { Text(context.state.exercise).font(.headline).lineLimit(2) }
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(context.state.exercise).font(.headline).lineLimit(2)
+                        countdownProgress(context)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } compactLeading: {
-                Text(context.state.exercise).lineLimit(1).frame(maxWidth: 80)
+                if context.state.countdown != nil { activityIcon(context.state) }
+                else { Text(context.state.exercise).lineLimit(1).frame(maxWidth: 80) }
             } compactTrailing: {
-                Text("\(context.state.completed)/\(context.state.total)").monospacedDigit()
+                compactStatus(context, minimal: false)
             } minimal: {
-                Text("\(context.state.completed)/\(context.state.total)").font(.caption2).minimumScaleFactor(0.6)
+                compactStatus(context, minimal: true)
             }
             .widgetURL(URL(string: "opengym://workout"))
+        }
+    }
+
+    private func activityIcon(_ state: TrainingActivityAttributes.ContentState) -> some View {
+        let symbol: String
+        switch state.countdown?.kind {
+        case .rest: symbol = "timer"
+        case .cardio: symbol = "figure.run"
+        case nil: symbol = "figure.strengthtraining.traditional"
+        }
+        return Image(systemName: symbol).foregroundStyle(.orange).accessibilityHidden(true)
+    }
+
+    @ViewBuilder private func status(_ context: ActivityViewContext<TrainingActivityAttributes>) -> some View {
+        if let timer = context.state.countdown {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(countdownLabel(timer, ended: context.isStale))
+                    .font(.caption).foregroundStyle(.secondary)
+                countdownText(timer, ended: context.isStale)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 72, alignment: .trailing)
+            }
+        } else {
+            Text("\(context.state.completed)/\(context.state.total) 组").monospacedDigit()
+        }
+    }
+
+    @ViewBuilder private func compactStatus(_ context: ActivityViewContext<TrainingActivityAttributes>, minimal: Bool) -> some View {
+        if let timer = context.state.countdown {
+            countdownText(timer, ended: context.isStale)
+                .font(.system(size: minimal ? 9 : 12, weight: .semibold))
+                .lineLimit(1)
+                .multilineTextAlignment(minimal ? .center : .trailing)
+                .frame(width: minimal ? 34 : 46, alignment: minimal ? .center : .trailing)
+                .accessibilityLabel(Text(countdownLabel(timer, ended: context.isStale)))
+                .accessibilityValue(countdownText(timer, ended: context.isStale))
+        } else {
+            Text("\(context.state.completed)/\(context.state.total)")
+                .font(minimal ? .caption2 : .subheadline)
+                .monospacedDigit().minimumScaleFactor(0.6)
+        }
+    }
+
+    private func countdownText(_ timer: TrainingActivityAttributes.Countdown, ended: Bool) -> Text {
+        // The system renders the bounded countdown while the app is suspended.
+        (ended ? Text("0:00") : Text(timerInterval: timer.interval, countsDown: true, showsHours: false))
+            .monospacedDigit()
+    }
+
+    @ViewBuilder private func countdownProgress(_ context: ActivityViewContext<TrainingActivityAttributes>) -> some View {
+        if let timer = context.state.countdown, !context.isStale {
+            ProgressView(timerInterval: timer.interval, countsDown: true) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+            .tint(.orange)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func countdownLabel(_ timer: TrainingActivityAttributes.Countdown, ended: Bool) -> String {
+        switch timer.kind {
+        case .rest: ended ? "休息结束" : "组间休息"
+        case .cardio: ended ? "本组计时结束" : "本组有氧剩余"
         }
     }
 }

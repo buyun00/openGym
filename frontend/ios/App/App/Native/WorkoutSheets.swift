@@ -130,7 +130,7 @@ struct WorkoutSettingsForm: View {
                         do {
                             let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
                             notificationStatus = allowed ? "锁屏提醒已启用" : "可在系统设置中开启通知权限"
-                            store.refreshWorkoutAlerts()
+                            store.refreshWorkoutAlerts(reschedule: true)
                         } catch { notificationStatus = "未能开启提醒：\(error.localizedDescription)" }
                     }
                 }

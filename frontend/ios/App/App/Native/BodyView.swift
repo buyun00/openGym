@@ -191,7 +191,7 @@ struct BodyView: View {
             } else {
                 Text("还没有体重记录").font(.title3)
             }
-            rangePicker("体重范围", selection: $weightRange, compact: compact)
+            BodyWeightRangePicker(selection: $weightRange)
             if !weights.isEmpty {
                 BodyWeightChart(points: weights, target: store.targetKg, selectedDate: $selectedWeightDate,
                                 height: compact ? 140 : min(240, max(170, height * 0.30)))
@@ -203,7 +203,9 @@ struct BodyView: View {
                 HStack { weightActions }
                 VStack(spacing: 8) { weightActions }
             }
-        }.fixedSize(horizontal: false, vertical: true)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .onChange(of: weightRange) { _, _ in selectedWeightDate = nil }
     }
 
     @ViewBuilder private var weightActions: some View {
@@ -403,9 +405,7 @@ private struct BodyDetailSheet: View {
             } else {
                 ContentUnavailableView("还没有体重记录", systemImage: "scalemass", description: Text("记录后即可查看变化曲线。"))
             }
-            Picker("体重范围", selection: $weightRange) {
-                ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.menu)
+            BodyWeightRangePicker(selection: $weightRange)
             if !weights.isEmpty { weightChart }
             else if !allWeights.isEmpty { Text("所选时间内没有称重记录，试试选择“全部”。").foregroundStyle(.secondary) }
             Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.borderedProminent)
@@ -604,6 +604,54 @@ private struct BodyDetailSheet: View {
                 }.frame(height: 180).chartYScale(domain: .automatic(includesZero: false))
                 Text(series.usesReps ? "每次训练完成的最多次数" : "每次训练完成的最大重量").font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+private struct BodyWeightRangePicker: View {
+    @Binding var selection: BodyRange
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            if !typeSize.isAccessibilitySize {
+                HStack(spacing: 0) {
+                    ForEach(BodyRange.allCases) { range in
+                        let selected = range == selection
+                        Button { selection = range } label: {
+                            Text(range.title)
+                                .font(.subheadline.weight(selected ? .semibold : .regular))
+                                .foregroundStyle(selected ? Color.primary : Color.secondary)
+                                .fixedSize()
+                                .padding(.horizontal, 8)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .frame(maxWidth: .infinity)
+                                .overlay(alignment: .bottom) {
+                                    if selected { Capsule().fill(.green).frame(width: 20, height: 2) }
+                                }
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+                .contentShape(.rect)
+                .simultaneousGesture(DragGesture(minimumDistance: 16).onEnded { value in
+                    let dx = value.translation.width
+                    guard abs(dx) >= 24, abs(dx) > abs(value.translation.height) * 1.3 else { return }
+                    let ranges = BodyRange.allCases
+                    guard let index = ranges.firstIndex(of: selection) else { return }
+                    let forward = layoutDirection == .leftToRight ? dx < 0 : dx > 0
+                    let next = index + (forward ? 1 : -1)
+                    if ranges.indices.contains(next) { selection = ranges[next] }
+                })
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("体重范围")
+            }
+            Picker("体重范围", selection: $selection) {
+                ForEach(BodyRange.allCases) { Text($0.title).tag($0) }
+            }.pickerStyle(.menu)
         }
     }
 }

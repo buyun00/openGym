@@ -41,8 +41,10 @@ final class GymStore {
 
     init() { load(); cloud.restore(into: self); refreshWorkoutAlerts(); refreshSystemSurfaces() }
 
-    func refreshWorkoutAlerts() {
-        workoutAlerts.update(end: restEndsAt, preferences: workoutPreferences) { [weak self] in self?.clearRest() }
+    func refreshWorkoutAlerts(reschedule: Bool = false) {
+        workoutAlerts.update(end: restEndsAt, preferences: workoutPreferences, reschedule: reschedule) { [weak self] in
+            self?.clearRest()
+        }
     }
 
     var todayIndex: Int { Weekday.index(for: Date()) }

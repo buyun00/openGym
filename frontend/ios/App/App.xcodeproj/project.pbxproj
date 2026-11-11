@@ -57,6 +57,7 @@
 		A41000000000000000000008 /* WorkoutRestAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000008 /* WorkoutRestAlerts.swift */; };
 		A41000000000000000000009 /* workout-catalogue.json in Resources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000009 /* workout-catalogue.json */; };
 		A4100000000000000000000A /* media in Resources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000A /* media */; };
+		A4100000000000000000000B /* WorkoutRestChime.wav in Resources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000B /* WorkoutRestChime.wav */; };
 		A51000000000000000000001 /* GymCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000001 /* GymCloudSync.swift */; };
 		A51000000000000000000002 /* GymConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000002 /* GymConnectionView.swift */; };
 		A51000000000000000000003 /* GymSyncBridge.js in Resources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000003 /* GymSyncBridge.js */; };
@@ -128,6 +129,7 @@
 		A40000000000000000000008 /* WorkoutRestAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRestAlerts.swift; sourceTree = "<group>"; };
 		A40000000000000000000009 /* workout-catalogue.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = workout-catalogue.json; sourceTree = "<group>"; };
 		A4000000000000000000000A /* media */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "../../../catalogue/media"; sourceTree = SOURCE_ROOT; };
+		A4000000000000000000000B /* WorkoutRestChime.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = App/WorkoutRestChime.wav; sourceTree = SOURCE_ROOT; };
 		A50000000000000000000001 /* GymCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymCloudSync.swift; sourceTree = "<group>"; };
 		A50000000000000000000002 /* GymConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymConnectionView.swift; sourceTree = "<group>"; };
 		A50000000000000000000003 /* GymSyncBridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = GymSyncBridge.js; sourceTree = "<group>"; };
@@ -243,6 +245,7 @@
 				A1000000000000000000000D /* exercises.json */,
 				A4000000000000000000000A /* media */,
 				A40000000000000000000009 /* workout-catalogue.json */,
+				A4000000000000000000000B /* WorkoutRestChime.wav */,
 				A40000000000000000000008 /* WorkoutRestAlerts.swift */,
 				A40000000000000000000007 /* WorkoutMediaView.swift */,
 				A40000000000000000000006 /* WorkoutExerciseOptions.swift */,
@@ -345,6 +348,7 @@
 				A1000000000000000000001D /* exercises.json in Resources */,
 				A4100000000000000000000A /* media in Resources */,
 				A41000000000000000000009 /* workout-catalogue.json in Resources */,
+				A4100000000000000000000B /* WorkoutRestChime.wav in Resources */,
 				A31000000000000000000006 /* BodyMapNotices.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

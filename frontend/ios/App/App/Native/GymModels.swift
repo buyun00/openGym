@@ -65,7 +65,15 @@ struct WorkoutSession: Codable, Identifiable, Hashable {
     var restEndsAt: Date? = nil
     var restOwner: UUID? = nil
     var restSetOwner: UUID? = nil
+    var cardioTimer: WorkoutCardioTimer? = nil
     var health: WorkoutHealth? = nil
+}
+
+struct WorkoutCardioTimer: Codable, Hashable {
+    var exerciseID: UUID
+    var setID: UUID
+    var start: Date
+    var end: Date
 }
 
 struct WorkoutHealth: Codable, Hashable {

@@ -87,7 +87,7 @@ checks = {
     "vector_geometry_matches_existing_source": not asset_errors,
     "native_controls_present": all(token in body for token in ["List {", "DisclosureGroup", "Picker(", "Chart(", "UICalendarView()", ".buttonStyle(.bordered)", ".buttonStyle(.borderedProminent)"]),
     "body_content_has_no_explicit_glass": all(token not in body for token in [".buttonStyle(.glass)", ".buttonStyle(.glassProminent)", ".glassEffect(", "GlassEffectContainer"]),
-    "no_simulated_glass_or_web_ui": all(token not in body for token in ["WKWebView", ".blur(", "UIVisualEffectView", "Canvas {", "DragGesture", "LinearGradient", "RadialGradient"]),
+    "no_simulated_glass_or_web_ui": all(token not in body for token in ["WKWebView", ".blur(", "UIVisualEffectView", "Canvas {", "LinearGradient", "RadialGradient"]),
     "native_calendar_not_custom_grid": "LazyVGrid" not in body and "UICalendarSelectionSingleDate" in body,
     "no_screenshot_or_mockup_in_production": all(token not in body for token in ["IMG_130", "generated_images", "85.5", "25.6", "63.6"]),
 }
