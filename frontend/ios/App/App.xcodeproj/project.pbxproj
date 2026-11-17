@@ -53,6 +53,7 @@
 		A41000000000000000000004 /* WorkoutSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000004 /* WorkoutSheets.swift */; };
 		A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000005 /* WorkoutExerciseCard.swift */; };
 		A4100000000000000000000C /* NumberInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000C /* NumberInput.swift */; };
+		A4100000000000000000000D /* WorkoutSetList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000D /* WorkoutSetList.swift */; };
 		A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000006 /* WorkoutExerciseOptions.swift */; };
 		A41000000000000000000007 /* WorkoutMediaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000007 /* WorkoutMediaView.swift */; };
 		A41000000000000000000008 /* WorkoutRestAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000008 /* WorkoutRestAlerts.swift */; };
@@ -126,6 +127,7 @@
 		A40000000000000000000004 /* WorkoutSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSheets.swift; sourceTree = "<group>"; };
 		A40000000000000000000005 /* WorkoutExerciseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseCard.swift; sourceTree = "<group>"; };
 		A4000000000000000000000C /* NumberInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberInput.swift; sourceTree = "<group>"; };
+		A4000000000000000000000D /* WorkoutSetList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSetList.swift; sourceTree = "<group>"; };
 		A40000000000000000000006 /* WorkoutExerciseOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseOptions.swift; sourceTree = "<group>"; };
 		A40000000000000000000007 /* WorkoutMediaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutMediaView.swift; sourceTree = "<group>"; };
 		A40000000000000000000008 /* WorkoutRestAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRestAlerts.swift; sourceTree = "<group>"; };
@@ -253,6 +255,7 @@
 				A40000000000000000000006 /* WorkoutExerciseOptions.swift */,
 				A40000000000000000000005 /* WorkoutExerciseCard.swift */,
 				A4000000000000000000000C /* NumberInput.swift */,
+				A4000000000000000000000D /* WorkoutSetList.swift */,
 				A40000000000000000000004 /* WorkoutSheets.swift */,
 				A40000000000000000000003 /* WorkoutCatalogue.swift */,
 				A40000000000000000000002 /* WorkoutStore.swift */,
@@ -440,6 +443,7 @@
 				A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */,
 				A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */,
 				A4100000000000000000000C /* NumberInput.swift in Sources */,
+				A4100000000000000000000D /* WorkoutSetList.swift in Sources */,
 				A41000000000000000000004 /* WorkoutSheets.swift in Sources */,
 				A41000000000000000000003 /* WorkoutCatalogue.swift in Sources */,
 				A41000000000000000000002 /* WorkoutStore.swift in Sources */,
@@ -606,7 +610,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 2.0.1;
 				DEVELOPMENT_TEAM = 6Y29E7PSVF;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = org.lin0.lingym;
@@ -629,7 +633,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				DEVELOPMENT_TEAM = 6Y29E7PSVF;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = org.lin0.lingym;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -647,7 +651,7 @@
  INFOPLIST_FILE = GymWidgets/Info.plist;
  IPHONEOS_DEPLOYMENT_TARGET = 26.0;
  LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
- MARKETING_VERSION = 1.0.1;
+ MARKETING_VERSION = 2.0.1;
  PRODUCT_BUNDLE_IDENTIFIER = org.lin0.lingym.widgets;
  PRODUCT_NAME = "$(TARGET_NAME)";
  SKIP_INSTALL = YES;
@@ -663,7 +667,7 @@
  INFOPLIST_FILE = GymWidgets/Info.plist;
  IPHONEOS_DEPLOYMENT_TARGET = 26.0;
  LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
- MARKETING_VERSION = 1.0.1;
+ MARKETING_VERSION = 2.0.1;
  PRODUCT_BUNDLE_IDENTIFIER = org.lin0.lingym.widgets;
  PRODUCT_NAME = "$(TARGET_NAME)";
  SKIP_INSTALL = YES;

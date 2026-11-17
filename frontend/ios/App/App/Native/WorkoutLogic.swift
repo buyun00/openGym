@@ -101,11 +101,18 @@ enum WorkoutLogic {
         return set
     }
 
-    static func updateMetric(_ metric: WorkoutMetric, value: Double?, setID: UUID, in sets: inout [WorkoutSet]) {
-        guard let index = sets.firstIndex(where: { $0.id == setID }) else { return }
+    static func updateMetric(_ metric: WorkoutMetric, value: Double?, setID: UUID, mode: WorkoutMode,
+                             in sets: inout [WorkoutSet]) {
+        guard value?.isFinite ?? true, let index = sets.firstIndex(where: { $0.id == setID }) else { return }
         metric.apply(value, to: &sets[index])
+        let updated = sets[index]
         for later in sets.indices.dropFirst(index + 1) where !sets[later].done {
-            metric.apply(value, to: &sets[later])
+            if mode == .reps {
+                sets[later].weight = updated.weight
+                sets[later].reps = updated.reps
+            } else {
+                metric.apply(value, to: &sets[later])
+            }
         }
     }
 

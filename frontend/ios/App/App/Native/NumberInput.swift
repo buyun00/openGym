@@ -6,22 +6,24 @@ struct ReplacingNumberField: UIViewRepresentable {
     @Binding var text: String
     var keyboard: UIKeyboardType
     var centered: Bool
+    var autofocus: Bool
     var editingChanged: (Bool) -> Void
     @Environment(\.isEnabled) private var isEnabled
 
     init(_ title: String, text: Binding<String>, keyboard: UIKeyboardType = .decimalPad,
-         centered: Bool = false, editingChanged: @escaping (Bool) -> Void = { _ in }) {
+         centered: Bool = false, autofocus: Bool = false, editingChanged: @escaping (Bool) -> Void = { _ in }) {
         self.title = title
         _text = text
         self.keyboard = keyboard
         self.centered = centered
+        self.autofocus = autofocus
         self.editingChanged = editingChanged
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
+        let field: UITextField = autofocus ? AutofocusTextField() : UITextField()
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         field.keyboardType = keyboard
@@ -59,6 +61,20 @@ struct ReplacingNumberField: UIViewRepresentable {
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextField, context: Context) -> CGSize? {
         let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? (centered ? 50 : 160)
         return CGSize(width: width, height: max(44, uiView.intrinsicContentSize.height))
+    }
+
+    private final class AutofocusTextField: UITextField {
+        private var requestedFocus = false
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, !requestedFocus else { return }
+            requestedFocus = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil else { return }
+                self.becomeFirstResponder()
+            }
+        }
     }
 
     final class Coordinator: NSObject, UITextFieldDelegate {
@@ -168,9 +184,7 @@ struct NumberStepper: View {
 
     private func edit(_ text: String) {
         draft = text
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
-        if normalized.isEmpty { changed(nil) }
-        else if let number = Double(normalized), number.isFinite { changed(bounded(number)) }
+        applyNumberInput(text) { changed($0.map(bounded)) }
     }
 
     private func adjust(by delta: Double) {
@@ -182,4 +196,10 @@ struct NumberStepper: View {
     private func bounded(_ number: Double) -> Double {
         min(bounds.upperBound, max(bounds.lowerBound, number))
     }
+}
+
+func applyNumberInput(_ text: String, changed: (Double?) -> Void) {
+    let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+    if normalized.isEmpty { changed(nil) }
+    else if let number = Double(normalized), number.isFinite { changed(number) }
 }

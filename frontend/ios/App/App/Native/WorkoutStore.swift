@@ -120,7 +120,8 @@ extension GymStore {
 
     func setMetric(_ metric: WorkoutMetric, exercise: UUID, set: UUID, value: Double?) {
         updateWorkoutExercise(exercise) { entry in
-            WorkoutLogic.updateMetric(metric, value: value, setID: set, in: &entry.sets)
+            let mode = entry.mode ?? WorkoutCatalogue.records[entry.exerciseId]?.mode ?? .reps
+            WorkoutLogic.updateMetric(metric, value: value, setID: set, mode: mode, in: &entry.sets)
         }
     }
 

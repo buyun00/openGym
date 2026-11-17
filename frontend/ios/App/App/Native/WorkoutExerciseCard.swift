@@ -1,14 +1,5 @@
 import SwiftUI
 
-// Align completion to the editable value, excluding the unit label above it.
-private enum WorkoutInputCenter: AlignmentID {
-    static func defaultValue(in dimensions: ViewDimensions) -> CGFloat { dimensions[VerticalAlignment.center] }
-}
-
-private extension VerticalAlignment {
-    static let workoutInputCenter = VerticalAlignment(WorkoutInputCenter.self)
-}
-
 struct WorkoutExerciseCard: View {
     @Environment(GymStore.self) private var store
     var exercise: WorkoutExercise
@@ -69,8 +60,21 @@ struct WorkoutExerciseCard: View {
                 }
             }
             VStack(spacing: 14) {
-                ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
-                    WorkoutSetEditor(exercise: exercise, set: set, index: index + 1, mode: mode, incline: metadata?.incline ?? false)
+                if mode == .reps {
+                    WorkoutStrengthSetList(
+                        sets: exercise.sets,
+                        change: { set, metric, value in
+                            store.setMetric(metric, exercise: exercise.id, set: set, value: value)
+                            return store.saveError == nil
+                        },
+                        toggle: { store.toggleSet(exercise: exercise.id, set: $0) },
+                        copy: { store.copySet(exercise: exercise.id, set: $0) },
+                        delete: { store.deleteSet(exercise: exercise.id, set: $0) }
+                    )
+                } else {
+                    ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                        WorkoutSetEditor(exercise: exercise, set: set, index: index + 1, mode: mode, incline: metadata?.incline ?? false)
+                    }
                 }
                 Button("加一组", systemImage: "plus") { store.addSet(exercise: exercise.id) }
                     .buttonStyle(.bordered).frame(maxWidth: .infinity, alignment: .leading)
@@ -131,14 +135,6 @@ private struct WorkoutSetEditor: View {
                 }
             }
             if mode == .cardio && !set.done { cardioControls }
-            if set.done && store.workoutPreferences.effort != .none {
-                Picker("强度 \(store.workoutPreferences.effort.title)", selection: Binding<Int?>(get: { set.rir }, set: { store.setRIR(exercise: exercise.id, set: set.id, value: $0) })) {
-                    Text("未记录").tag(Int?.none)
-                    ForEach(0...10, id: \.self) { rir in
-                        Text(store.workoutPreferences.effort == .rpe ? "RPE \(10 - rir)" : "还能做 \(rir) 次").tag(Optional(rir))
-                    }
-                }.pickerStyle(.menu).font(.caption)
-            }
         }
         .task(id: timerEnd) {
             guard let end = timerEnd else { return }
@@ -201,29 +197,19 @@ private struct WorkoutSetEditor: View {
     }
 
     private func rowMenu(showTitle: Bool = false) -> some View {
-        Menu {
-            Button("复制这一组", systemImage: "plus.square.on.square") { store.copySet(exercise: exercise.id, set: set.id) }
-            Button("删除这一组", systemImage: "trash", role: .destructive) { timerEnd = nil; store.deleteSet(exercise: exercise.id, set: set.id) }
-        } label: {
-            Text(showTitle ? "第 \(index) 组" : "\(index)")
-                .font(.subheadline).monospacedDigit()
-                .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
-        }
-        .accessibilityLabel("第 \(index) 组操作")
+        WorkoutSetMenu(index: index, showTitle: showTitle, copy: {
+            store.copySet(exercise: exercise.id, set: set.id)
+        }, delete: {
+            timerEnd = nil
+            store.deleteSet(exercise: exercise.id, set: set.id)
+        })
     }
 
     private var checkButton: some View {
-        Button {
+        WorkoutSetCompletionButton(index: index, done: set.done) {
             timerEnd = nil
             store.toggleSet(exercise: exercise.id, set: set.id)
-        } label: {
-            Image(systemName: set.done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 28, weight: .regular))
-                .frame(width: 44, height: 44).contentShape(.rect)
         }
-        .buttonStyle(.plain).foregroundStyle(set.done ? Color.green : Color.secondary)
-        .accessibilityLabel(set.done ? "取消第 \(index) 组完成" : "完成第 \(index) 组")
-        .accessibilityValue(set.done ? "已完成" : "未完成")
     }
 
     private var fields: some View {

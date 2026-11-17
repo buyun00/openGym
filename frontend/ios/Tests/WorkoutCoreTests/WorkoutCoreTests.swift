@@ -102,7 +102,7 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertEqual(WorkoutLogic.copy(previous).reps, 8)
     }
 
-    func testEditingASetUpdatesOnlyThatMetricInLaterUnfinishedSets() {
+    func testStrengthEditsCopyWeightAndRepsToLaterUnfinishedSets() {
         let completed = WorkoutSet(id: UUID(), weight: 20, reps: 8, done: true, completedAt: .now)
         let earlier = WorkoutSet(id: UUID(), weight: 25, reps: 9, done: false)
         let current = WorkoutSet(id: UUID(), weight: 30, reps: 10, done: false)
@@ -111,14 +111,26 @@ final class WorkoutCoreTests: XCTestCase {
         let original = [completed, earlier, current, laterCompleted, later]
         var sets = original
 
-        WorkoutLogic.updateMetric(.weight, value: 42.5, setID: current.id, in: &sets)
+        WorkoutLogic.updateMetric(.weight, value: 42.5, setID: current.id, mode: .reps, in: &sets)
         XCTAssertEqual(sets.map(\.weight), [20, 25, 42.5, 35, 42.5])
-        XCTAssertEqual(sets.map(\.reps), original.map(\.reps))
-        WorkoutLogic.updateMetric(.reps, value: 12, setID: current.id, in: &sets)
+        XCTAssertEqual(sets.map(\.reps), [8, 9, 10, 8, 10])
+
+        sets[4].weight = 36
+        WorkoutLogic.updateMetric(.reps, value: 12, setID: current.id, mode: .reps, in: &sets)
+        XCTAssertEqual(sets.map(\.weight), [20, 25, 42.5, 35, 42.5])
         XCTAssertEqual(sets.map(\.reps), [8, 9, 12, 8, 12])
         XCTAssertEqual(sets[0], original[0])
         XCTAssertEqual(sets[1], original[1])
         XCTAssertEqual(sets[3], original[3])
+    }
+
+    func testTimedEditsUpdateOnlyTheSelectedMetricInLaterSets() {
+        let current = WorkoutSet(id: UUID(), weight: 20, reps: 0, done: false, seconds: 45)
+        let later = WorkoutSet(id: UUID(), weight: 30, reps: 0, done: false, seconds: 60)
+        var sets = [current, later]
+        WorkoutLogic.updateMetric(.weight, value: 24, setID: current.id, mode: .time, in: &sets)
+        XCTAssertEqual(sets.map(\.weight), [24, 24])
+        XCTAssertEqual(sets.map(\.seconds), [45, 60])
     }
 
     func testExclusionSkipsProgressionButKeepsVisibleHistory() {
