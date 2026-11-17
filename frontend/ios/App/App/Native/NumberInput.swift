@@ -63,16 +63,45 @@ struct ReplacingNumberField: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: ReplacingNumberField
+        private var replaceOnFirstEdit = false
 
         init(_ parent: ReplacingNumberField) { self.parent = parent }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
-            textField.clearsOnInsertion = true
+            replaceOnFirstEdit = true
+            textField.selectedTextRange = textField.textRange(
+                from: textField.beginningOfDocument, to: textField.endOfDocument
+            )
             parent.editingChanged(true)
         }
 
         func textFieldDidEndEditing(_ textField: UITextField) {
+            replaceOnFirstEdit = false
             parent.editingChanged(false)
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersInRanges ranges: [NSValue],
+                       replacementString string: String) -> Bool {
+            allowChange(in: textField, replacement: string)
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            allowChange(in: textField, replacement: string)
+        }
+
+        private func allowChange(in textField: UITextField, replacement: String) -> Bool {
+            guard replaceOnFirstEdit else { return true }
+            replaceOnFirstEdit = false
+            guard let current = textField.text, !current.isEmpty else { return true }
+
+            // The initial tap can move the cursor after focus begins. Use the new input
+            // as the full value even if UIKit proposes changing only the caret range.
+            textField.text = replacement
+            let end = textField.endOfDocument
+            textField.selectedTextRange = textField.textRange(from: end, to: end)
+            textField.sendActions(for: .editingChanged)
+            return false
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
