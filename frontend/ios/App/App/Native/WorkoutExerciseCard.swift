@@ -105,15 +105,15 @@ private struct WorkoutSetEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if typeSize.isAccessibilitySize { verticalRow }
+            if typeSize.isAccessibilitySize { stackedRow }
             else {
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .workoutInputCenter, spacing: 6) {
-                        rowMenu.frame(width: 20)
-                        ForEach(metrics, id: \.self) { metric in field(metric).frame(minWidth: 80) }
+                    HStack(alignment: .workoutInputCenter, spacing: 8) {
+                        rowMenu()
+                        fields
                         checkButton
                     }
-                    verticalRow
+                    stackedRow
                 }
             }
             if mode == .time && !set.done {
@@ -182,25 +182,34 @@ private struct WorkoutSetEditor: View {
         }
     }
 
-    private var verticalRow: some View {
+    private var stackedRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack { rowMenu; Text("第 \(index) 组").font(.subheadline); Spacer() }
-            ForEach(metrics, id: \.self) { metric in
-                HStack(alignment: .workoutInputCenter, spacing: 8) {
-                    field(metric, spacious: true)
-                    if metric == metrics.last { checkButton }
-                    else { Color.clear.frame(width: 44, height: 44).accessibilityHidden(true) }
+            HStack {
+                rowMenu(showTitle: true)
+                Spacer()
+                checkButton
+            }
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: 8) { fields }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .workoutInputCenter, spacing: 8) { fields }
+                    VStack(spacing: 8) { fields }
                 }
             }
         }
     }
 
-    private var rowMenu: some View {
+    private func rowMenu(showTitle: Bool = false) -> some View {
         Menu {
             Button("复制这一组", systemImage: "plus.square.on.square") { store.copySet(exercise: exercise.id, set: set.id) }
             Button("删除这一组", systemImage: "trash", role: .destructive) { timerEnd = nil; store.deleteSet(exercise: exercise.id, set: set.id) }
-        } label: { Text("\(index)").font(.caption).monospacedDigit().frame(minHeight: 44) }
-            .accessibilityLabel("第 \(index) 组操作")
+        } label: {
+            Text(showTitle ? "第 \(index) 组" : "\(index)")
+                .font(.subheadline).monospacedDigit()
+                .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+        }
+        .accessibilityLabel("第 \(index) 组操作")
     }
 
     private var checkButton: some View {
@@ -217,53 +226,17 @@ private struct WorkoutSetEditor: View {
         .accessibilityValue(set.done ? "已完成" : "未完成")
     }
 
-    private func field(_ metric: WorkoutMetric, spacious: Bool = false) -> some View {
-        WorkoutNumberField(metric: metric, value: metric.value(in: set), spacious: spacious) { value in
-            store.setMetric(metric, exercise: exercise.id, set: set.id, value: value)
-        }
-    }
-}
-
-private struct WorkoutNumberField: View {
-    var metric: WorkoutMetric
-    var value: Double?
-    var spacious = false
-    var changed: (Double?) -> Void
-    @State private var draft = ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(metric.title).font(.caption2).foregroundStyle(.secondary)
-                .lineLimit(spacious ? nil : 1).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 0) {
-                Button { step(-1) } label: { Image(systemName: "minus").frame(width: spacious ? 44 : 24, height: 44) }.accessibilityLabel("减少\(metric.title)")
-                TextField("—", text: $draft)
-                    .textFieldStyle(.plain)
-                    .keyboardType(metric == .reps || metric == .seconds ? .numberPad : .decimalPad)
-                    .multilineTextAlignment(.center).monospacedDigit().focused($focused)
-                    .accessibilityLabel(metric.title).frame(minWidth: 32, minHeight: 44)
-                    .onChange(of: draft) { _, text in
-                        guard focused else { return }
-                        if text.isEmpty { changed(nil) }
-                        else if let number = Double(text.replacingOccurrences(of: ",", with: ".")), number.isFinite { changed(number) }
-                    }
-                Button { step(1) } label: { Image(systemName: "plus").frame(width: spacious ? 44 : 24, height: 44) }.accessibilityLabel("增加\(metric.title)")
+    private var fields: some View {
+        ForEach(metrics, id: \.self) { metric in
+            VStack(spacing: 6) {
+                Text(metric.title).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                NumberStepper(title: metric.title, value: metric.value(in: set), bounds: 0...metric.maximum,
+                              step: metric.step, keyboard: metric == .reps || metric == .seconds ? .numberPad : .decimalPad) { value in
+                    store.setMetric(metric, exercise: exercise.id, set: set.id, value: value)
+                }
+                .alignmentGuide(.workoutInputCenter) { $0[VerticalAlignment.center] }
             }
-            .buttonStyle(.plain).font(.subheadline)
-            .background(Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
-            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(focused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: focused ? 1.5 : 0.5).allowsHitTesting(false) }
-            .alignmentGuide(.workoutInputCenter) { $0[VerticalAlignment.center] }
         }
-        .onAppear { refresh() }
-        .onChange(of: value) { _, _ in if !focused { refresh() } }
-        .onChange(of: focused) { _, focus in if !focus { refresh() } }
-    }
-
-    private func refresh() { draft = value.map(formatKg) ?? "" }
-    private func step(_ direction: Double) {
-        let next = min(metric.maximum, max(0, (value ?? 0) + direction * metric.step))
-        draft = formatKg(next)
-        changed(next)
     }
 }

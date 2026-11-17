@@ -71,7 +71,13 @@ extension GymStore {
         let mode = info.workoutMode
         let previous = WorkoutLogic.previous(info.id, mode: mode, in: workouts, forProgression: true)?.1
         let completed = previous?.sets.filter(\.done) ?? []
-        let sets = completed.isEmpty ? (0..<(mode == .cardio ? 1 : 3)).map { _ in WorkoutLogic.seed(mode: mode) } : completed.map(WorkoutLogic.copy)
+        let sets: [WorkoutSet]
+        if completed.isEmpty {
+            let count = mode == .cardio ? 1 : 3
+            sets = (0..<count).map { _ in WorkoutLogic.seed(mode: mode) }
+        } else {
+            sets = completed.map { WorkoutLogic.seed(mode: mode, previous: $0) }
+        }
         let incoming = WorkoutExercise(id: UUID(), exerciseId: info.id, name: info.name, sets: sets, mode: mode,
                                        note: previous?.notePinned == true ? previous?.note : nil, notePinned: previous?.notePinned)
         mutateActive { session in
@@ -113,7 +119,9 @@ extension GymStore {
     }
 
     func setMetric(_ metric: WorkoutMetric, exercise: UUID, set: UUID, value: Double?) {
-        updateSet(exercise: exercise, set: set) { metric.apply(value, to: &$0) }
+        updateWorkoutExercise(exercise) { entry in
+            WorkoutLogic.updateMetric(metric, value: value, setID: set, in: &entry.sets)
+        }
     }
 
     func adjustRest(by seconds: Int) {

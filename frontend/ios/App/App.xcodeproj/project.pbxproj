@@ -52,6 +52,7 @@
 		A41000000000000000000003 /* WorkoutCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000003 /* WorkoutCatalogue.swift */; };
 		A41000000000000000000004 /* WorkoutSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000004 /* WorkoutSheets.swift */; };
 		A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000005 /* WorkoutExerciseCard.swift */; };
+		A4100000000000000000000C /* NumberInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4000000000000000000000C /* NumberInput.swift */; };
 		A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000006 /* WorkoutExerciseOptions.swift */; };
 		A41000000000000000000007 /* WorkoutMediaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000007 /* WorkoutMediaView.swift */; };
 		A41000000000000000000008 /* WorkoutRestAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000008 /* WorkoutRestAlerts.swift */; };
@@ -124,6 +125,7 @@
 		A40000000000000000000003 /* WorkoutCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutCatalogue.swift; sourceTree = "<group>"; };
 		A40000000000000000000004 /* WorkoutSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSheets.swift; sourceTree = "<group>"; };
 		A40000000000000000000005 /* WorkoutExerciseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseCard.swift; sourceTree = "<group>"; };
+		A4000000000000000000000C /* NumberInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberInput.swift; sourceTree = "<group>"; };
 		A40000000000000000000006 /* WorkoutExerciseOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutExerciseOptions.swift; sourceTree = "<group>"; };
 		A40000000000000000000007 /* WorkoutMediaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutMediaView.swift; sourceTree = "<group>"; };
 		A40000000000000000000008 /* WorkoutRestAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutRestAlerts.swift; sourceTree = "<group>"; };
@@ -250,6 +252,7 @@
 				A40000000000000000000007 /* WorkoutMediaView.swift */,
 				A40000000000000000000006 /* WorkoutExerciseOptions.swift */,
 				A40000000000000000000005 /* WorkoutExerciseCard.swift */,
+				A4000000000000000000000C /* NumberInput.swift */,
 				A40000000000000000000004 /* WorkoutSheets.swift */,
 				A40000000000000000000003 /* WorkoutCatalogue.swift */,
 				A40000000000000000000002 /* WorkoutStore.swift */,
@@ -436,6 +439,7 @@
 				A41000000000000000000007 /* WorkoutMediaView.swift in Sources */,
 				A41000000000000000000006 /* WorkoutExerciseOptions.swift in Sources */,
 				A41000000000000000000005 /* WorkoutExerciseCard.swift in Sources */,
+				A4100000000000000000000C /* NumberInput.swift in Sources */,
 				A41000000000000000000004 /* WorkoutSheets.swift in Sources */,
 				A41000000000000000000003 /* WorkoutCatalogue.swift in Sources */,
 				A41000000000000000000002 /* WorkoutStore.swift in Sources */,

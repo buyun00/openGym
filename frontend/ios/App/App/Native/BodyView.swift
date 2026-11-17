@@ -377,7 +377,8 @@ private struct BodyDetailSheet: View {
                 Button("好") { store.saveError = nil }
             } message: { Text(store.saveError ?? "") }
             .alert("目标体重", isPresented: $showGoal) {
-                TextField("kg", text: $goalText).keyboardType(.decimalPad)
+                TextField("kg", text: $goalText, prompt: Text(store.targetKg.map { "\(formatKg($0)) kg" } ?? "kg"))
+                    .keyboardType(.decimalPad)
                 Button("保存") { if let value = parseKg(goalText) { store.setTarget(value) } }
                     .disabled(parseKg(goalText) == nil)
                 if store.targetKg != nil { Button("清除目标", role: .destructive) { store.setTarget(nil) } }
@@ -410,7 +411,7 @@ private struct BodyDetailSheet: View {
             else if !allWeights.isEmpty { Text("所选时间内没有称重记录，试试选择“全部”。").foregroundStyle(.secondary) }
             Button("记体重", systemImage: "plus") { entry = .weight() }.buttonStyle(.borderedProminent)
             Button(store.targetKg.map { "目标 \(formatKg($0)) kg" } ?? "设置目标", systemImage: "scope") {
-                goalText = store.targetKg.map(formatKg) ?? ""
+                goalText = ""
                 showGoal = true
             }.buttonStyle(.bordered)
             composition

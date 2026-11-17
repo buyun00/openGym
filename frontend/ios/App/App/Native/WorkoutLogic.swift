@@ -61,6 +61,8 @@ enum WorkoutMetric: String, CaseIterable {
 }
 
 enum WorkoutLogic {
+    static let defaultReps = 10
+
     static func cardioTimer(exercise: WorkoutExercise, setID: UUID, now: Date) -> WorkoutCardioTimer? {
         guard exercise.mode == nil || exercise.mode == .cardio,
               let set = exercise.sets.first(where: { $0.id == setID }), !set.done,
@@ -87,12 +89,24 @@ enum WorkoutLogic {
         return next
     }
 
-    static func seed(mode: WorkoutMode, reps: Int = 8, previous: WorkoutSet? = nil) -> WorkoutSet {
-        if let previous { return copy(previous) }
+    static func seed(mode: WorkoutMode, reps: Int = WorkoutLogic.defaultReps, previous: WorkoutSet? = nil) -> WorkoutSet {
+        if let previous {
+            var set = copy(previous)
+            if mode == .reps { set.reps = reps }
+            return set
+        }
         var set = WorkoutSet(id: UUID(), weight: 0, reps: mode == .reps ? reps : 0, done: false)
         if mode == .cardio { set.minutes = 20; set.speed = 8 }
         if mode == .time { set.seconds = 45 }
         return set
+    }
+
+    static func updateMetric(_ metric: WorkoutMetric, value: Double?, setID: UUID, in sets: inout [WorkoutSet]) {
+        guard let index = sets.firstIndex(where: { $0.id == setID }) else { return }
+        metric.apply(value, to: &sets[index])
+        for later in sets.indices.dropFirst(index + 1) where !sets[later].done {
+            metric.apply(value, to: &sets[later])
+        }
     }
 
     static func previous(_ id: String, mode: WorkoutMode, in history: [WorkoutSession], forProgression: Bool) -> (Date, WorkoutExercise)? {

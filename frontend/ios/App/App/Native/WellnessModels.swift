@@ -111,6 +111,8 @@ struct DoseRecord: Codable, Identifiable, Equatable {
 }
 
 struct WellnessSettings: Codable, Equatable {
+    static let waterTimeCapacity = 24 * 60
+
     // No assumed goal or completed records from the approved illustration.
     var waterGoalML: Int?
     var cupML = 250
@@ -126,8 +128,21 @@ struct WellnessSettings: Codable, Equatable {
         (waterGoalML == nil || (250...10000).contains(waterGoalML!)) &&
         (50...2000).contains(cupML) && bTimes.count == 3 &&
         Set(bTimes).count == 3 && (dWeekday == nil || (1...7).contains(dWeekday!)) &&
-        !waterTimes.isEmpty && waterTimes.count <= 4 && Set(waterTimes).count == waterTimes.count &&
+        !waterTimes.isEmpty && Set(waterTimes).count == waterTimes.count &&
         (bTimes + [dTime] + waterTimes).allSatisfy { (0...23).contains($0.hour) && (0...59).contains($0.minute) }
+    }
+
+    mutating func addWaterReminderTime() {
+        let used = Set(waterTimes.map(\.minutes))
+        let minutesPerDay = Self.waterTimeCapacity
+        let start = ((waterTimes.last?.minutes ?? 8 * 60) + 60) % minutesPerDay
+        for offset in 0..<minutesPerDay {
+            let minutes = (start + offset) % minutesPerDay
+            if !used.contains(minutes) {
+                waterTimes.append(ClockTime(hour: minutes / 60, minute: minutes % 60))
+                return
+            }
+        }
     }
 }
 
@@ -197,7 +212,7 @@ enum WellnessReminderPlan {
     static let prefix = "opengym.wellness."
 
     // One-shot instances let recording a dose remove exactly that reminder, not a whole recurring plan.
-    // Seven days stays below iOS's pending-notification limit (at most 50 requests).
+    // The scheduler takes the nearest reminders that fit the system's pending-request limit.
     static func make(state: WellnessState, now: Date, calendar: Calendar = .current) -> [WellnessReminder] {
         var result: [WellnessReminder] = []
         for offset in 0..<7 {

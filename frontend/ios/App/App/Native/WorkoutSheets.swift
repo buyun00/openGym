@@ -182,29 +182,18 @@ struct WorkoutExercisePicker: View {
     var pick: (ExerciseInfo) -> Void
     @State private var query = ""
     @State private var ownedOnly = false
-    private var results: [ExerciseInfo] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Catalogue.exercises.filter { info in
-            let metadata = WorkoutCatalogue.records[info.id]
-            if ownedOnly && !store.ownedEquipment.contains(metadata?.equipment ?? info.equipment) { return false }
-            return query.isEmpty || info.name.localizedStandardContains(query) || metadata?.name.localizedStandardContains(query) == true
-                || metadata?.englishName.localizedStandardContains(query) == true || Catalogue.equipmentName(info.equipment).localizedStandardContains(query)
-        }
-    }
     var body: some View {
+        let results = Catalogue.search(query, owned: ownedOnly ? Set(store.ownedEquipment) : nil)
         List {
             if results.isEmpty { ContentUnavailableView.search(text: query) }
             ForEach(results) { info in
                 Button { pick(info) } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(WorkoutCatalogue.records[info.id]?.name ?? info.name).foregroundStyle(.primary)
-                        Text(Catalogue.equipmentName(info.equipment)).font(.caption).foregroundStyle(.secondary)
-                    }
+                    ExerciseListRow(exercise: info, subtitle: Catalogue.equipmentName(info.equipment))
                 }
             }
         }
         .navigationTitle("选择动作")
-        .searchable(text: $query, prompt: "搜索中文、英文或器械")
+        .searchable(text: $query, prompt: "搜索名称、编号或器械")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Toggle("我的器械", isOn: $ownedOnly).toggleStyle(.button) } }
     }
 }

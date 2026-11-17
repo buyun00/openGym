@@ -56,7 +56,7 @@ struct WellnessSettingsSheet: View {
 
     private var waterSection: some View {
         Section {
-            TextField("每日目标 mL", text: $goalText).keyboardType(.numberPad)
+            ReplacingNumberField("每日目标 mL", text: $goalText, keyboard: .numberPad)
             if !validGoal { Text("请输入 250–10000 mL，或留空取消目标").foregroundStyle(.red).font(.caption) }
             Stepper("一杯 \(draft.cupML) mL", value: $draft.cupML, in: 50...2000, step: 50)
         } header: { Text("饮水") } footer: { Text("目标由你设置。清空目标不会删除已有记录。") }
@@ -86,8 +86,22 @@ struct WellnessSettingsSheet: View {
         Section {
             Toggle("饮水提醒", isOn: $draft.waterReminders)
             if draft.waterReminders {
-                ForEach(draft.waterTimes.indices, id: \.self) { index in
-                    DatePicker("饮水 · 第 \(index + 1) 次", selection: timeBinding(index: index, type: nil), displayedComponents: .hourAndMinute)
+                HStack {
+                    Text("每天 \(draft.waterTimes.count) 次")
+                    Spacer()
+                    HStack(spacing: 4) {
+                        NumberStepButton(symbol: "minus", label: "减少一次饮水提醒") {
+                            if draft.waterTimes.count > 1 { draft.waterTimes.removeLast() }
+                        }
+                        .disabled(draft.waterTimes.count <= 1)
+                        NumberStepButton(symbol: "plus", label: "增加一次饮水提醒") { draft.addWaterReminderTime() }
+                            .disabled(draft.waterTimes.count >= WellnessSettings.waterTimeCapacity)
+                    }
+                    .background(Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
+                }
+                ForEach(Array(draft.waterTimes.enumerated()), id: \.offset) { index, time in
+                    DatePicker("饮水 · 第 \(index + 1) 次",
+                               selection: waterTimeBinding(index: index, fallback: time), displayedComponents: .hourAndMinute)
                 }
             }
             Toggle("服用提醒", isOn: $draft.supplementReminders)
@@ -104,17 +118,26 @@ struct WellnessSettingsSheet: View {
                 }
             }
         } header: { Text("本地提醒") } footer: {
-            Text("两类提醒分别开启，保存时请求系统权限。服用仅提醒已设置时点的计划。安排未来 7 天，每次打开 App 自动续排；长时间不打开会停止提醒。已记录的服用和当天已达标的饮水会取消后续提醒。")
+            Text("两类提醒分别开启，保存时请求系统权限。未来 7 天内优先安排最近的提醒，打开 App 会自动续排。记录服用或当天饮水达标后，相应的后续提醒会取消。")
         }
     }
 
-    private func timeBinding(index: Int, type: Supplement?) -> Binding<Date> {
+    private func waterTimeBinding(index: Int, fallback: ClockTime) -> Binding<Date> {
+        Binding {
+            let time = draft.waterTimes.indices.contains(index) ? draft.waterTimes[index] : fallback
+            return time.date(on: Date())
+        } set: { date in
+            guard draft.waterTimes.indices.contains(index) else { return }
+            draft.waterTimes[index] = ClockTime(date: date)
+        }
+    }
+
+    private func timeBinding(index: Int, type: Supplement) -> Binding<Date> {
         Binding {
             let time: ClockTime
             switch type {
             case .b: time = draft.bTimes[index]
             case .d: time = draft.dTime
-            case nil: time = draft.waterTimes[index]
             }
             return time.date(on: Date())
         } set: { date in
@@ -122,7 +145,6 @@ struct WellnessSettingsSheet: View {
             switch type {
             case .b: draft.bTimes[index] = value
             case .d: draft.dTime = value
-            case nil: draft.waterTimes[index] = value
             }
         }
     }

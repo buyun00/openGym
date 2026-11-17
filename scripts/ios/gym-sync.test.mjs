@@ -74,6 +74,15 @@ test('web IDs remain stable and distinct for duplicate exercise slots',()=>{
   assert.equal(view.routines[0].exercises[1].weight,15);
   assert.equal(view.routines[0].exercises[0].mode,'cardio');
 });
+test('Native plans default to ten reps only when the shared plan omits its rep target', () => {
+  const raw = fixture();
+  const lift = raw.routines[0].ex[1];
+  delete lift.reps;
+  assert.equal(project(raw).routines[0].exercises[1].reps, 10);
+  lift.reps = 8;
+  assert.equal(project(raw).routines[0].exercises[1].reps, 8);
+});
+
 test('Sunday and date-specific plans project to native IDs',()=>{
   const raw=fixture(), view=project(raw);
   assert.deepEqual(view.week[6].routineIds,[view.routines[0].id]);

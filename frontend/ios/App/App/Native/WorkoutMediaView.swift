@@ -40,17 +40,40 @@ struct WorkoutMediaView: View {
 
 struct WorkoutThumbnail: View {
     var record: WorkoutCatalogueRecord?
+    var compact = false
     var body: some View {
         Group {
             if let url = record?.mediaURL(animated: false), let image = UIImage(contentsOfFile: url.path) {
                 Image(uiImage: image).resizable().scaledToFit()
             } else {
                 VStack(spacing: 8) {
-                    Image(systemName: "figure.strengthtraining.traditional").font(.largeTitle)
-                    Text("暂无动作演示").font(.caption)
+                    Image(systemName: "figure.strengthtraining.traditional").font(compact ? .title3 : .largeTitle)
+                    if !compact { Text("暂无动作演示").font(.caption) }
                 }.foregroundStyle(.gray).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.background(.white)
+    }
+}
+
+struct WorkoutListThumbnail: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+    var record: WorkoutCatalogueRecord?
+
+    var body: some View {
+        WorkoutThumbnail(record: record, compact: true)
+            .frame(width: 72, height: 72)
+            .overlay {
+                if visible && scenePhase == .active && !reduceMotion, let url = record?.mediaURL(animated: true) {
+                    WorkoutLoopPlayer(url: url, playing: true)
+                }
+            }
+            .clipShape(.rect(cornerRadius: 8))
+            .onAppear { visible = true }
+            .onDisappear { visible = false }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

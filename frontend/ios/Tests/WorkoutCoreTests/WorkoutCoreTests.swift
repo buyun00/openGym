@@ -87,6 +87,40 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertEqual(copy.incline, 3)
     }
 
+    func testNewStrengthSetsUseTenRepsEvenWhenTheyReuseAnOldWeight() {
+        let previous = WorkoutSet(id: UUID(), weight: 62.5, reps: 8, done: true, rir: 2, completedAt: .now)
+        let fresh = WorkoutLogic.seed(mode: .reps)
+        let next = WorkoutLogic.seed(mode: .reps, previous: previous)
+        XCTAssertEqual(fresh.reps, 10)
+        XCTAssertEqual(next.weight, 62.5)
+        XCTAssertEqual(next.reps, 10)
+        XCTAssertNotEqual(next.id, previous.id)
+        XCTAssertFalse(next.done)
+        XCTAssertNil(next.rir)
+        XCTAssertNil(next.completedAt)
+        XCTAssertEqual(WorkoutLogic.seed(mode: .reps, reps: 12, previous: previous).reps, 12)
+        XCTAssertEqual(WorkoutLogic.copy(previous).reps, 8)
+    }
+
+    func testEditingASetUpdatesOnlyThatMetricInLaterUnfinishedSets() {
+        let completed = WorkoutSet(id: UUID(), weight: 20, reps: 8, done: true, completedAt: .now)
+        let earlier = WorkoutSet(id: UUID(), weight: 25, reps: 9, done: false)
+        let current = WorkoutSet(id: UUID(), weight: 30, reps: 10, done: false)
+        let later = WorkoutSet(id: UUID(), weight: 30, reps: 11, done: false)
+        let laterCompleted = WorkoutSet(id: UUID(), weight: 35, reps: 8, done: true, completedAt: .now)
+        let original = [completed, earlier, current, laterCompleted, later]
+        var sets = original
+
+        WorkoutLogic.updateMetric(.weight, value: 42.5, setID: current.id, in: &sets)
+        XCTAssertEqual(sets.map(\.weight), [20, 25, 42.5, 35, 42.5])
+        XCTAssertEqual(sets.map(\.reps), original.map(\.reps))
+        WorkoutLogic.updateMetric(.reps, value: 12, setID: current.id, in: &sets)
+        XCTAssertEqual(sets.map(\.reps), [8, 9, 12, 8, 12])
+        XCTAssertEqual(sets[0], original[0])
+        XCTAssertEqual(sets[1], original[1])
+        XCTAssertEqual(sets[3], original[3])
+    }
+
     func testExclusionSkipsProgressionButKeepsVisibleHistory() {
         let eligible = session([exercise(done: true)], finished: true)
         var excluded = session([exercise(done: true)], finished: true, time: 200)

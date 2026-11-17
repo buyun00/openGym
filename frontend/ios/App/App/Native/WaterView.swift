@@ -473,7 +473,7 @@ struct WaterEntrySheet: View {
                     Picker("饮品", selection: $drink) {
                         ForEach(DrinkKind.allCases) { kind in Label(kind.name, systemImage: kind.symbol).tag(kind) }
                     }
-                    TextField("容量 mL", text: $amount).keyboardType(.numberPad)
+                    ReplacingNumberField("容量 mL", text: $amount, keyboard: .numberPad)
                     DatePicker("时间", selection: $date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
                 } footer: { Text("按实际喝下的饮品容量记录，单位 mL，不做补水系数换算。可输入 1–5000 mL。") }
                 if entry != nil {

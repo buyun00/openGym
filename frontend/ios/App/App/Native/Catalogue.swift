@@ -47,7 +47,9 @@ enum Catalogue {
                 if owned.isEmpty || !owned.contains(exercise.equipment) { return false }
             }
             if trimmed.isEmpty { return true }
-            return exercise.name.localizedStandardContains(trimmed)
+            return exercise.id.localizedStandardContains(trimmed)
+                || exercise.name.localizedStandardContains(trimmed)
+                || WorkoutCatalogue.records[exercise.id]?.englishName.localizedStandardContains(trimmed) == true
                 || equipmentName(exercise.equipment).localizedStandardContains(trimmed)
                 || bodyPartName(exercise.bodyPart).localizedStandardContains(trimmed)
         }

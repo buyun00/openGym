@@ -236,10 +236,6 @@ struct ActiveWorkoutView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button("结束") { sheet = .finish }.fixedSize()
         }
-        ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-            Button("完成") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
-        }
     }
 
     private var workoutStatus: some View {
@@ -355,10 +351,12 @@ struct WorkoutRestBar: View {
             HStack {
                 Label(workoutClock(end.timeIntervalSince(context.date)), systemImage: "timer").monospacedDigit().font(.headline)
                 Spacer()
-                Button("减 15 秒", systemImage: "minus") { store.adjustRest(by: -15) }.labelStyle(.iconOnly)
-                Button("加 15 秒", systemImage: "plus") { store.adjustRest(by: 15) }.labelStyle(.iconOnly)
-                Button("跳过") { store.clearRest() }
-            }.buttonStyle(.bordered).padding(12)
+                NumberStepButton(symbol: "minus", label: "减 15 秒") { store.adjustRest(by: -15) }
+                    .background(Color(uiColor: .secondarySystemFill), in: .rect(cornerRadius: 8))
+                NumberStepButton(symbol: "plus", label: "加 15 秒") { store.adjustRest(by: 15) }
+                    .background(Color(uiColor: .secondarySystemFill), in: .rect(cornerRadius: 8))
+                Button("跳过") { store.clearRest() }.buttonStyle(.bordered)
+            }.padding(12)
         }
     }
 }

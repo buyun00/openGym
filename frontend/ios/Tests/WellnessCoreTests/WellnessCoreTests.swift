@@ -169,6 +169,27 @@ final class WellnessCoreTests: XCTestCase {
         XCTAssertFalse(WellnessReminderPlan.make(state: state, now: now, calendar: calendar).contains { $0.id.contains(".water.") })
     }
 
+    func testWaterReminderCountCanGrowAndShrinkAcrossRelaunch() throws {
+        let now = date("2026-10-19T00:00:00+08:00")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var state = WellnessState()
+        state.settings.waterReminders = true
+        state.settings.addWaterReminderTime()
+        state.settings.addWaterReminderTime()
+        XCTAssertEqual(state.settings.waterTimes.count, 6)
+        try WellnessPersistence.write(state, to: url)
+        var loaded = try XCTUnwrap(WellnessPersistence.read(from: url))
+        XCTAssertEqual(loaded.settings, state.settings)
+        XCTAssertEqual(WellnessReminderPlan.make(state: loaded, now: now, calendar: calendar).count, 42)
+        loaded.settings.waterTimes.removeLast(4)
+        try WellnessPersistence.write(loaded, to: url)
+        loaded = try XCTUnwrap(WellnessPersistence.read(from: url))
+        XCTAssertEqual(WellnessReminderPlan.make(state: loaded, now: now, calendar: calendar).count, 14)
+        loaded.settings.waterTimes.append(loaded.settings.waterTimes[0])
+        XCTAssertFalse(loaded.settings.isValid)
+    }
+
     func testDSTAndYearBoundaryUseCivilDays() {
         var newYork = calendar
         newYork.timeZone = TimeZone(identifier: "America/New_York")!

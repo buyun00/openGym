@@ -18,28 +18,26 @@ struct RoutineEditorView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(slot.name)
                                 .font(.headline)
-                            Stepper(value: Binding(
-                                get: { store.routine(routineId)?.exercises.first { $0.id == slot.id }?.setCount ?? slot.setCount },
-                                set: { store.updateSlot(routineId, slot.id, setCount: $0) }
-                            ), in: 1...20) {
-                                Text("\(slot.setCount) 组")
+                            LabeledContent("组数") {
+                                NumberStepper(title: "组数", value: Double(slot.setCount), bounds: 1...20, keyboard: .numberPad) { value in
+                                    if let value { store.updateSlot(routineId, slot.id, setCount: Int(value.rounded())) }
+                                }.frame(maxWidth: 180)
                             }
                             let mode = slot.mode ?? Catalogue.byId[slot.exerciseId]?.workoutMode ?? .reps
                             if mode == .cardio {
-                                Stepper("时长 \(formatKg(slot.minutes ?? 20)) 分钟", value: routineMetric(slot, \.minutes, fallback: 20), in: 0...600, step: 1)
-                                Stepper("速度 \(formatKg(slot.speed ?? 8)) km/h", value: routineMetric(slot, \.speed, fallback: 8), in: 0...100, step: 0.1)
+                                routineMetric(slot, .minutes, \.minutes, fallback: 20)
+                                routineMetric(slot, .speed, \.speed, fallback: 8)
                                 if WorkoutCatalogue.records[slot.exerciseId]?.incline == true {
-                                    Stepper("坡度 \(formatKg(slot.incline ?? 0))%", value: routineMetric(slot, \.incline, fallback: 0), in: 0...40, step: 0.5)
+                                    routineMetric(slot, .incline, \.incline, fallback: 0)
                                 }
                             } else if mode == .time {
-                                Stepper("保持 \(formatKg(slot.seconds ?? 45)) 秒", value: routineMetric(slot, \.seconds, fallback: 45), in: 1...3600)
+                                routineMetric(slot, .seconds, \.seconds, fallback: 45, minimum: 1)
                             } else {
-                            Stepper(value: Binding(
-                                get: { store.routine(routineId)?.exercises.first { $0.id == slot.id }?.reps ?? slot.reps },
-                                set: { store.updateSlot(routineId, slot.id, reps: $0) }
-                            ), in: 1...100) {
-                                Text("每组 \(slot.reps) 次")
-                            }
+                                LabeledContent("每组次数") {
+                                    NumberStepper(title: "每组次数", value: Double(slot.reps), bounds: 1...100, keyboard: .numberPad) { value in
+                                        if let value { store.updateSlot(routineId, slot.id, reps: Int(value.rounded())) }
+                                    }.frame(maxWidth: 180)
+                                }
                             }
                             TextField("动作备注", text: Binding(get: {
                                 store.routine(routineId)?.exercises.first { $0.id == slot.id }?.note ?? ""
@@ -66,8 +64,15 @@ struct RoutineEditorView: View {
         .navigationTitle(store.routine(routineId)?.name ?? "计划")
     }
 
-    private func routineMetric(_ slot: RoutineExercise, _ key: WritableKeyPath<RoutineExercise, Double?>, fallback: Double) -> Binding<Double> {
-        Binding(get: { store.routine(routineId)?.exercises.first { $0.id == slot.id }?[keyPath: key] ?? fallback },
-                set: { value in store.updateRoutineWorkoutFields(routineId, slotId: slot.id) { $0[keyPath: key] = value } })
+    private func routineMetric(_ slot: RoutineExercise, _ metric: WorkoutMetric,
+                               _ key: WritableKeyPath<RoutineExercise, Double?>, fallback: Double, minimum: Double = 0) -> some View {
+        LabeledContent(metric.title) {
+            NumberStepper(title: metric.title, value: slot[keyPath: key] ?? fallback, bounds: minimum...metric.maximum,
+                          step: metric.step, keyboard: metric == .seconds ? .numberPad : .decimalPad) { value in
+                if let value {
+                    store.updateRoutineWorkoutFields(routineId, slotId: slot.id) { $0[keyPath: key] = value }
+                }
+            }.frame(maxWidth: 180)
+        }
     }
 }

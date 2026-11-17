@@ -59,8 +59,11 @@ final class WellnessNotifications {
                 return
             }
             let plan = WellnessReminderPlan.make(state: state, now: now)
-            // Leave room for unrelated notifications, including the existing workout timer.
-            let available = max(0, 64 - (pending.count - owned.count))
+            // Reserve a slot for the rest timer even when no workout is active.
+            let otherCount = pending.filter {
+                !$0.identifier.hasPrefix(WellnessReminderPlan.prefix) && $0.identifier != WorkoutRestAlerts.identifier
+            }.count
+            let available = max(0, 63 - otherCount)
             do {
                 for reminder in plan.prefix(available) {
                     guard !Task.isCancelled else { return }

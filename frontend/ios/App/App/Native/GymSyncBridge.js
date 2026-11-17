@@ -39,7 +39,7 @@ var GymSyncBridge = (() => {
         const n = seen[e.id] || 0; seen[e.id] = n + 1;
         const id = uuid(e._nativeId || `${parent}/exercise/${e.id}/${n}`);
         const common = {id, exerciseId:String(e.id), name:name(e.id), mode:mode(e), note:e.note || null};
-        if (!workout) return {...common, setCount:Number(e.sets) || 3, reps:Number(e.reps) || 8,
+        if (!workout) return {...common, setCount:Number(e.sets) || 3, reps:Number(e.reps) || 10,
           weight:e.weight == null ? null : e.weight * kg, minutes:e.min ?? null, speed:e.speed == null ? null : e.speed * speed,
           incline:e.incline ?? null, seconds:e.sec ?? null};
         return {...common, routineId:e.rid ? uuid(e.rid) : null, notePinned:e.notePinned ?? null,

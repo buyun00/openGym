@@ -206,10 +206,10 @@ final class GymStore {
     }
 
     func addSet(exercise exerciseId: UUID) {
-        mutateActive { session in
-        guard let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
-        let last = session.exercises[ei].sets.last
-        session.exercises[ei].sets.append(WorkoutLogic.seed(mode: session.exercises[ei].mode ?? .reps, previous: last))
+        updateWorkoutExercise(exerciseId) { exercise in
+            let mode = exercise.mode ?? WorkoutCatalogue.records[exercise.exerciseId]?.mode ?? .reps
+            let set = WorkoutLogic.seed(mode: mode, previous: exercise.sets.last)
+            exercise.sets.append(set)
         }
     }
 
@@ -221,14 +221,6 @@ final class GymStore {
             session.restEndsAt = nil; session.restOwner = nil; session.restSetOwner = nil
         }
         }
-    }
-
-    func setWeight(exercise exerciseId: UUID, set setId: UUID, weight: Double) {
-        updateSet(exercise: exerciseId, set: setId) { $0.weight = min(500, max(0, weight)) }
-    }
-
-    func setReps(exercise exerciseId: UUID, set setId: UUID, reps: Int) {
-        updateSet(exercise: exerciseId, set: setId) { $0.reps = min(100, max(0, reps)) }
     }
 
     /// health == nil is an explicit skip, including when a manual attachment already exists.
@@ -350,7 +342,7 @@ final class GymStore {
         guard let index = routines.firstIndex(where: { $0.id == routineId }) else { return }
         let mode = info.workoutMode
         routines[index].exercises.append(RoutineExercise(id: UUID(), exerciseId: info.id, name: info.name,
-            setCount: mode == .cardio ? 1 : 3, reps: 8, mode: mode,
+            setCount: mode == .cardio ? 1 : 3, reps: WorkoutLogic.defaultReps, mode: mode,
             minutes: mode == .cardio ? 20 : nil, speed: mode == .cardio ? 8 : nil))
         save()
     }

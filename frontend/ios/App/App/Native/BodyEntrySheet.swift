@@ -57,8 +57,8 @@ struct BodyEntrySheet: View {
                 }
                 if request.kind == .weight {
                     Section {
-                        TextField("体重 kg", text: $weight).keyboardType(.decimalPad)
-                        TextField("体脂率 %（选填）", text: $fat).keyboardType(.decimalPad)
+                        ReplacingNumberField("体重 kg", text: $weight)
+                        ReplacingNumberField("体脂率 %（选填）", text: $fat)
                         if let kg = parseKg(weight), let percent = number(fat, below: 100) {
                             LabeledContent("去脂体重（估算）", value: "\(formatKg(kg * (1 - percent / 100))) kg")
                         }
@@ -66,10 +66,10 @@ struct BodyEntrySheet: View {
                 } else {
                     Section {
                         ForEach(BodyMeasurement.fields, id: \.self) { field in
-                            TextField("\(field) cm（选填）", text: Binding(
+                            ReplacingNumberField("\(field) cm（选填）", text: Binding(
                                 get: { measurements[field] ?? "" },
                                 set: { measurements[field] = $0 }
-                            )).keyboardType(.decimalPad)
+                            ))
                         }
                     } footer: { Text("至少填写一项。每天保留一条围度记录；保存会更新所选日期的围度。") }
                 }
