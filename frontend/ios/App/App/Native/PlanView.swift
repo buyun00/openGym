@@ -33,7 +33,7 @@ struct PlanView: View {
                             }
                             ForEach(Array(routine.exercises.enumerated()), id: \.element.id) { index, slot in
                                 PlanExerciseDetail(slot: slot, number: index + 1,
-                                                   startingWeight: preview.indices.contains(index) ? preview[index].sets.first?.weight : nil)
+                                                   weights: preview.indices.contains(index) ? preview[index].sets.map(\.weight) : [])
                                     .padding(.vertical, 8)
                                     // A standalone Divider becomes an extra List row with its own minimum height.
                                     .listRowSeparator(.visible, edges: .bottom)
@@ -289,7 +289,8 @@ private struct PlanWeekOverview: View {
         if currentSession != nil {
             Button("继续") { store.tab = .workout }.buttonStyle(.bordered).tint(.orange)
         } else if isToday, selectedRoutines.contains(where: { !$0.exercises.isEmpty }) {
-            Button(completed.isEmpty ? "开始" : "再练") { store.start(selectedRoutines) }
+            Button(completed.isEmpty ? "开始" : "再练") { store.startToday() }
+                .disabled(store.startingWorkout)
                 .buttonStyle(.bordered).tint(.green).fixedSize(horizontal: true, vertical: false)
         } else if isToday, let routine = selectedRoutines.first, routine.exercises.isEmpty {
             NavigationLink("加动作") { RoutineEditorView(routineId: routine.id) }
@@ -323,7 +324,7 @@ private struct PlanWeekOverview: View {
 private struct PlanExerciseDetail: View {
     let slot: RoutineExercise
     let number: Int
-    let startingWeight: Double?
+    let weights: [Double]
 
     private var mode: WorkoutMode { slot.mode ?? Catalogue.byId[slot.exerciseId]?.workoutMode ?? .reps }
     private var targets: String {
@@ -331,14 +332,19 @@ private struct PlanExerciseDetail: View {
         switch mode {
         case .reps:
             values.append("每组 \(slot.reps) 次")
-            if let startingWeight, startingWeight > 0 { values.append("起始参考 \(formatKg(startingWeight)) kg") }
         case .time:
             values.append("每组 \(formatKg(slot.seconds ?? 45)) 秒")
-            if let startingWeight, startingWeight > 0 { values.append("起始参考 \(formatKg(startingWeight)) kg") }
         case .cardio:
             values.append("每组 \(formatKg(slot.minutes ?? 20)) 分钟")
             values.append("\(formatKg(slot.speed ?? 8)) km/h")
             if let incline = slot.incline { values.append("坡度 \(formatKg(incline))%") }
+        }
+        if mode != .cardio, let first = weights.first {
+            if weights.contains(where: { $0 != first }) {
+                values.append(weights.map(formatKg).joined(separator: " / ") + " kg")
+            } else if first > 0 || slot.setWeights != nil {
+                values.append("每组 \(formatKg(first)) kg")
+            }
         }
         return values.joined(separator: " · ")
     }

@@ -53,6 +53,7 @@ import { useSheetKeyboard, useRevealActiveChip, tappable } from './lib/use-sheet
 import { useAutoMore } from './lib/use-auto-more.js'
 import { isFav, toggleFav, sortFavouritesFirst, sortYoursFirst } from './lib/favourites.js'
 import { buildSessionEntries, buildPlannedEntry, builtOutOfProgression } from './lib/session-start.js'
+import { hasSetWeights } from './lib/set-weights.js'
 import { finishCompare, finishCardio } from './lib/finish-compare.js'
 import { workoutFit, fitFileName } from './lib/fit-export.js'
 import { joinSessionNoProg } from './lib/session-noprog.js'
@@ -1687,6 +1688,18 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
     if (progressionStepInvalid) return
     close()
     const sets = Math.max(1, Math.round(c.sets) || (cardio ? 1 : 3))
+    const saveWeighted = out => {
+      const changedLoad = (seed.weight ?? 0) !== out.weight
+      if (hasSetWeights(c) && !changedLoad && mode === modeOf({ ...seed, id: ex.id })) {
+        out.setWeights = Array.from({ length: out.sets }, (_, i) => c.setWeights[Math.min(i, c.setWeights.length - 1)])
+        if (out.pyramid && JSON.stringify(c.pyramidWeight) !== JSON.stringify(seed.pyramidWeight)) {
+          out.setWeights = out.pyramidWeight || Array(out.sets).fill(0)
+        }
+      } else if (existing && changedLoad && !out.pyramid) {
+        out.setWeights = Array(out.sets).fill(out.weight)
+      }
+      onSave(out)
+    }
     // Only carry progression settings that differ from the inherited default, so a plan file
     // stays readable and "follow the routine" keeps meaning exactly that.
     const prog = {}
@@ -1727,7 +1740,7 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
     // "Last set to failure": written only when on, so a plan that never asked keeps its shape.
     const withFailure = c.lastToFailure === true ? { lastToFailure: true } : {}
     if (cardio) onSave({ sets, min: Math.max(1, Math.round(c.min) || 20), speed: Math.max(0, c.speed || 8), ...withNote, ...withRest })
-    else if (mode === 'time') onSave({ sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || 45), weight: Math.max(0, c.weight || 0), ...flags, ...(perSide ? { side: true } : {}), ...prog, ...withNote, ...withWarmups, ...withRest, ...withMeant, ...withFailure })
+    else if (mode === 'time') saveWeighted({ sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || 45), weight: Math.max(0, c.weight || 0), ...flags, ...(perSide ? { side: true } : {}), ...prog, ...withNote, ...withWarmups, ...withRest, ...withMeant, ...withFailure })
     else {
       // A unilateral target is stored even: the split has to divide, and a typed 15 would
       // otherwise plan seven reps on one side and eight on the other, every session.
@@ -1761,7 +1774,7 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
       if (c.backoff === true && backoffOffered(out, 'reps', ex, bw) && isBackoff({ ...out, backoff: true })) out.backoff = true
       // A pyramid has its own Max set for this, so the flag is not offered (or kept) there.
       if (!list.length) Object.assign(out, withFailure)
-      onSave(out)
+      saveWeighted(out)
     }
   }
   return <>
@@ -2771,12 +2784,23 @@ export function DayNoteRow({ iso, note }) {
 /* ============================ workout lifecycle ============================ */
 // `routineIds` accepts `string | string[] | null` — `[r.id]` for one routine,
 // `effectiveRoutineIds(...)` for today's planned session, `[]` / null for explicit freestyle.
-export function startFlow(routineIds) {
+export async function startFlow(routineIds, { today = false } = {}) {
   // The weigh-in is a setting (Settings → During a workout, issue #137): off goes straight
   // into the session with no body weight on it, same as "Start without weighing in".
   // Local change: no weigh-in step at all. The session carries the latest logged weight (body
   // hook, Home, Stats) so bodyweight-based exercises still have one.
-  beginWorkout(routineIds, lastBW(S())?.w ?? null)
+  const store = useStore.getState()
+  if (store.S.active) { navToWorkout(); return }
+  const planned = today || [].concat(routineIds ?? []).length > 0
+  if (planned && store.user && navigator.onLine !== false) {
+    await store.pullState()
+    if (useStore.getState().user?.id !== store.user.id) return
+  }
+  const st = S()
+  if (st.active) { navToWorkout(); return }
+  const ids = today ? effectiveRoutineIds(st, todayISO()) : routineIds
+  if (planned && ![].concat(ids ?? []).some(id => st.routines.some(r => r.id === id))) { nav('/plan'); return }
+  beginWorkout(ids, lastBW(st)?.w ?? null)
 }
 export function beginWorkout(routineIds, bw) {
   const st = S()

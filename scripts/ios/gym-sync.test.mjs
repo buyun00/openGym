@@ -151,6 +151,35 @@ test('kg/lb and km/h/mph conversions preserve server units and untouched values'
   const local=copy(base);local.weighIns[0].kilograms=70;
   const out=prepare(base,local,raw).state;assert.equal(out.unit,'lb');assert.equal(out.bodyweight[0].w,70/0.45359237);
 });
+
+test('ordered set loads round trip in the server unit, including zero and untouched L/R loads', () => {
+  const raw = fixture();
+  raw.unit = 'lb';
+  const lift = raw.routines[0].ex[1];
+  lift.setWeights = [0, [40, 45], 60];
+  const base = project(raw), local = copy(base), slot = local.routines[0].exercises[1];
+  assert.deepEqual(slot.setWeights, [0, 45 * 0.45359237, 60 * 0.45359237]);
+  slot.setCount = 4;
+  slot.setWeights = [0, slot.setWeights[1], 25, 27.5];
+  slot.weight = 0;
+  const out = prepare(base, local, raw).state;
+  assert.deepEqual(out.routines[0].ex[1].setWeights, [0, [40, 45], 25 / 0.45359237, 27.5 / 0.45359237]);
+  assert.equal(out.routines[0].ex[1].sets, 4);
+  assert.deepEqual(out.routines[0].ex[1].progression, lift.progression);
+  assert.deepEqual(project(out).routines[0].exercises[1].setWeights, slot.setWeights);
+  assert.equal(prepare(project(out), project(out), out).changed, false);
+});
+
+test('edits to different planned sets merge and competing edits to one set report a conflict', () => {
+  const raw = fixture();
+  raw.routines[0].ex[1].setWeights = [40, 45, 50];
+  const base = project(raw), local = copy(base), remote = copy(raw);
+  local.routines[0].exercises[1].setWeights[1] = 47.5;
+  remote.routines[0].ex[1].setWeights[2] = 55;
+  assert.deepEqual(prepare(base,local,remote).state.routines[0].ex[1].setWeights, [40, 47.5, 55]);
+  remote.routines[0].ex[1].setWeights[1] = 42.5;
+  assert.throws(() => prepare(base,local,remote), /同时修改/);
+});
 test('new native workout uses the web history schema and original routine ID',()=>{
   const raw=fixture(),base=project(raw),local=copy(base),w=copy(base.workouts[0]);
   w.id='AAAAAAAA-BBBB-4CCC-ADDD-EEEEEEEEEEEE';w.exercises[0].id='BBBBBBBB-BBBB-4CCC-ADDD-EEEEEEEEEEEE';local.workouts.push(w);
@@ -228,20 +257,25 @@ test('real local API: browser pairing, first download, conditional write, readba
   const get=()=>fetch(url+'/api/data',{headers}).then(r=>r.json());
   const put=body=>fetch(url+'/api/data',{method:'PUT',headers,body:JSON.stringify(body)});
   const first=await get(),base=project(first.state),local=copy(base);local.restSeconds=120;
+  Object.assign(local.routines[0].exercises[1], {setCount:4, weight:40, setWeights:[40,45,50,47.5]});
   assert.deepEqual(first.state.routines,fixture().routines);
   const modified=prepare(base,local,first.state).state;
   assert.equal((await put({state:modified,baseRev:first.rev,baseWid:first.state._wid})).status,200);
   const synced=await get();assert.equal(synced.state.restSec,120);assert.equal(synced.state.bodyweight.length,1);
+  assert.deepEqual(synced.state.routines[0].ex[1].setWeights,[40,45,50,47.5]);
+  assert.equal(project(synced.state).routines[0].exercises[1].setCount,4);
   assert.deepEqual(synced.state.gymEquipment,fixture().gymEquipment);
   assert.equal(prepare(project(synced.state),project(synced.state),synced.state).changed,false);
   const native=project(synced.state),edited=copy(native);edited.routines[0].name='手机计划';
   const web=copy(synced.state);web.bodyweight.push({d:'2026-10-22',w:78});
+  web.routines[0].ex[1].weight=35; // A flat edit from a backend client after a per-set plan was saved.
   assert.equal((await put({state:web,baseRev:synced.rev,baseWid:synced.state._wid})).status,200);
   const stale=await put({state:prepare(native,edited,synced.state).state,baseRev:synced.rev,baseWid:synced.state._wid});
   assert.equal(stale.status,409);
   const fresh=await get(),merged=prepare(native,edited,fresh.state).state;
   assert.equal((await put({state:merged,baseRev:fresh.rev,baseWid:fresh.state._wid})).status,200);
   const final=await get();assert.equal(final.state.bodyweight.length,2);assert.equal(final.state.routines[0].name,'手机计划');
+  assert.deepEqual(project(final.state).routines[0].exercises[1].setWeights,[35,35,35,35]);
   const me=await fetch(url+'/api/me',{headers}).then(r=>r.json());assert.equal(me.user.id,uid);
   const replay=await fetch(url+'/api/pair/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
   assert.equal(replay.status,400);

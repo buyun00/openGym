@@ -5,6 +5,7 @@ import { fmtSpeed } from './speed.js'
 import { hasIncline, inclineFrom } from './incline.js'
 import { isCardio, isBodyweightEq, isAssisted, betterWeight } from './exercises.js'
 import { barWeightFor } from './bar.js'
+import { applySetWeights, hasSetWeights } from './set-weights.js'
 import { phaseForSet, modeForSet, modeForEntry, isWarmupRow, isFailureSet, isDropSet, isRestPauseSet, normalizeMode, completedVolumeOf, hasCompletedWork, nextDropWeight, splitBurstReps, makeSideSet, isSideSet, syncSideAggregate, WEIGHT_ORIGIN_MANUAL, dropsOf, clustersOf } from './workout-model.js'
 import { backoffAt, backoffStepOf, backoffWeights } from './backoff.js'
 import { dbLoadOf, bellsIn, volumeFactor, historyAs, ownedFloor } from './dumbbells.js'
@@ -240,9 +241,14 @@ export function exLine(cfg, unit, speedUnit) {
   // Added weight reads as added: "+10 kg" on a dip belt, "60 kg" on a barbell.
   // Back-off sets read as the sequence they open at: "3 × 6 · 26 → 24 → 22 kg".
   const backoff = mode === 'reps' && cfg.weight > 0 ? backoffStepOf(cfg, unit) : 0
-  const load = !cfg.weight ? ''
+  let load = !cfg.weight ? ''
     : backoff ? ' · ' + (isBw(cfg) ? '+' : '') + backoffWeights(cfg.weight, n, backoff).map(fmtNum).join(' → ') + ' ' + unit
       : ' · ' + (isBw(cfg) ? '+' : '') + fmtNum(cfg.weight) + ' ' + unit
+  if (hasSetWeights(cfg)) {
+    const labels = cfg.setWeights.map(w => Array.isArray(w) ? w.map(fmtNum).join('/') : fmtNum(w ?? cfg.weight ?? 0))
+    const sequence = labels.every(label => label === labels[0]) ? labels[0] : labels.join(' → ')
+    load = ' · ' + (isBw(cfg) ? '+' : '') + sequence + ' ' + unit
+  }
   if (mode === 'cardio') return `${n} × ${cfg.min || 20} min @ ${fmtSpeed(cfg.speed || 8, speedUnit)}`
   // A timed hold has no rep count to spell a split out of ("8/side" below) — "per side" says it
   // happens twice, once each side (buildWorkSets), rather than trying to divide a duration.
@@ -529,7 +535,8 @@ export function nextTrainingDay(S, iso) {
  * insertWarmupRow for why this module cannot read it itself).
  */
 export function buildSets(S, cfg, options = {}) {
-  const rows = buildWorkSets(S, cfg, options)
+  const work = buildWorkSets(S, cfg, options)
+  const rows = !options.preferLast && hasSetWeights(cfg) ? applySetWeights(work, cfg.setWeights, cfg.weight) : work
   const warm = Math.max(0, Math.min(MAX_PLANNED_WARMUPS, Math.round(cfg.warmupSets) || 0))
   if (!warm) return rows
   const mode = modeOf(cfg)
@@ -659,7 +666,11 @@ function seedSideFromLast(row, prev, planReps) {
  * drops sitting underneath it. `grid` puts each drop on a loadable weight (nextDropWeight).
  */
 export function applyIntensifierPlan(sets, cfg, grid) {
-  return applyFailurePlan(shapeRows(sets, cfg, grid), cfg)
+  const shaped = shapeRows(sets, cfg, grid)
+  if (cfg?.intensifier?.type === 'restpause' && cfg.setWeights?.length > 1) {
+    shaped.push(...sets.filter(row => !isWarmupRow(row)).slice(1))
+  }
+  return applyFailurePlan(shaped, cfg)
 }
 
 /**

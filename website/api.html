@@ -4063,6 +4063,21 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
     <span class="p-type">object[]</span>
     <span class="p-desc">Exercises with set/rep targets.</span>
   </div>
+  <div class="prow">
+    <span class="p-name">ex[].sets</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;)</span></span>
+    <span class="p-desc">Number of work sets.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">ex[].weight</span>
+    <span class="p-type">number <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc">Starting weight in the profile's unit.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">ex[].setWeights</span>
+    <span class="p-type">(number <span class="p-hint">(0&ndash;)</span> | null | (number <span class="p-hint">(0&ndash;)</span>)[])[]</span>
+    <span class="p-desc">Explicit loads for the work sets in order, in the profile's unit. Zero is an explicit unloaded set. These take priority over the starting weight and history. Any sets beyond the list use the starting weight. On a default, unstamped write against the current baseRev, changing only the starting weight also replaces the existing per-set loads.</span>
+  </div>
 </div>
   </div>
 </details>

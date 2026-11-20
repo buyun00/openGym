@@ -39,9 +39,19 @@ var GymSyncBridge = (() => {
         const n = seen[e.id] || 0; seen[e.id] = n + 1;
         const id = uuid(e._nativeId || `${parent}/exercise/${e.id}/${n}`);
         const common = {id, exerciseId:String(e.id), name:name(e.id), mode:mode(e), note:e.note || null};
-        if (!workout) return {...common, setCount:Number(e.sets) || 3, reps:Number(e.reps) || 10,
+        if (!workout) {
+          // A native set has one load. Keep the raw L/R pair on upload if this load wasn't edited.
+          const weights = Array.isArray(e.setWeights) ? e.setWeights
+            : list(e.pyramid).length && Array.isArray(e.pyramidWeight) ? e.pyramidWeight.map(w => w > 0 ? w : null) : null;
+          const kgWeight = w => {
+            const value = Array.isArray(w) ? Math.max(...w) : w;
+            return Number.isFinite(value) && value >= 0 ? value * kg : null;
+          };
+          return {...common, setCount:Number(e.sets) || 3, reps:Number(e.reps) || 10,
+          setWeights:weights?.map(kgWeight) ?? null,
           weight:e.weight == null ? null : e.weight * kg, minutes:e.min ?? null, speed:e.speed == null ? null : e.speed * speed,
           incline:e.incline ?? null, seconds:e.sec ?? null};
+        }
         return {...common, routineId:e.rid ? uuid(e.rid) : null, notePinned:e.notePinned ?? null,
           noProgression:e.noProg ?? null, restSeconds:e.restSec ?? null,
           sets:list(e.sets).map((v,i) => ({id:uuid(v._nativeId || `${id}/set/${i}`), weight:(v.w || 0)*kg,
@@ -79,6 +89,9 @@ var GymSyncBridge = (() => {
     if (same(base, remote) || same(local, remote)) return clone(local);
     if (base == null || local == null || remote == null) throw new Error(`两端同时修改了 ${path}，未覆盖任何数据。请先在网页核对，再重新下载。`);
     if ([base,local,remote].every(Array.isArray)) {
+      if (path.endsWith('/setWeights') && base.length === local.length && base.length === remote.length) {
+        return base.map((weight,i)=>merge(weight,local[i],remote[i],`${path}/${i+1}`));
+      }
       const key = v => v?.id ?? v?.day;
       if ([...base,...local,...remote].every(v => v && typeof v === 'object' && key(v)!=null)) {
         const bm=new Map(base.map(v=>[key(v),v])), lm=new Map(local.map(v=>[key(v),v])), rm=new Map(remote.map(v=>[key(v),v]));
@@ -113,6 +126,16 @@ var GymSyncBridge = (() => {
       if (!isWorkout) {
         for (const [n,w] of [['setCount','sets'],['reps','reps'],['mode','mode'],['minutes','min'],['seconds','sec'],['incline','incline']]) update(e,a,b,n,w);
         update(e,a,b,'weight','weight',v=>v/kg); update(e,a,b,'speed','speed',v=>v/speed);
+        update(e,a,b,'setWeights','setWeights',weights=>weights.map((w,i)=>
+          a?.setWeights?.[i] === w && e.setWeights?.[i] != null ? e.setWeights[i] : w == null ? null : w/kg));
+        if (list(e.pyramid).length && a?.setCount !== b.setCount) {
+          const resize = values => Array.from({length:b.setCount}, (_,i)=>values[Math.min(i,values.length-1)]);
+          e.pyramid = resize(e.pyramid);
+          if (list(e.pyramidRest).length) e.pyramidRest = resize(e.pyramidRest);
+          if (list(e.pyramidWeight).length) e.pyramidWeight = resize(e.pyramidWeight);
+        }
+        if (list(e.pyramid).length && e.setWeights && !same(a?.setWeights,b.setWeights))
+          e.pyramidWeight = e.setWeights.map(w=>Array.isArray(w) ? Math.max(...w) : w ?? 0);
       } else {
         update(e,a,b,'notePinned','notePinned'); update(e,a,b,'noProgression','noProg'); update(e,a,b,'restSeconds','restSec');
         update(e,a,b,'routineId','rid',routineWebId);

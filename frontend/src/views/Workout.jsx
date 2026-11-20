@@ -35,7 +35,8 @@ import { Button, Check, NumberField } from '../components/ui.jsx'
 import { defaultIncrement, weightIncrement, stepWeight } from '../lib/progression.js'
 import { progressionGuidance } from '../lib/progression-copy.js'
 import { buildPlannedEntry, plannedConfigOf, builtOutOfProgression } from '../lib/session-start.js'
-import { routineChangesFromEntry, updateRoutineFromEntry } from '../lib/routines.js'
+import { routineChangesFromEntry, updateRoutineFromEntry, editWorkoutSetPlan, routineSlotIndex } from '../lib/routines.js'
+import { hasSetWeights } from '../lib/set-weights.js'
 import { sessionNoProg, setSessionNoProg, setEntryNoProg, joinSessionNoProg } from '../lib/session-noprog.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { markAllSetsDone, sessionHistory } from '../lib/backfill.js'
@@ -70,7 +71,7 @@ function StartChooser() {
         <div><div className="big">{todayName}</div><div className="muted small">{exCount(todayRoutines.reduce((n, r) => n + r.ex.length, 0))}</div></div>
         <span className="lrow-i" style={{ width: 38, height: 38, borderRadius: 9, fontSize: 22 }}><Icon name={glyphOf(todayRoutines[0].emoji)} /></span>
       </div>
-      <Button variant="primary" icon="play" onClick={() => startFlow(todayIds)}>{t('Start {0}', todayName)}</Button>
+      <Button variant="primary" icon="play" onClick={() => startFlow(todayIds, { today: true })}>{t('Start {0}', todayName)}</Button>
     </div>}
     {others.length > 0 && <><h4 className="sec">{t('Other routines')}</h4>
       <div className="list">{others.map(r => <div key={r.id} className="item" onClick={() => startFlow([r.id])}>
@@ -117,10 +118,9 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
   // filled in by applyIntensifierPlan; these only add/edit/remove entries live from here on.
   const mutSet = (i, fn) => update(s => { const row = s.active.entries[entryIdx].sets[i]; s.active.entries[entryIdx].sets[i] = fn(row) }, true)
   // Warm-up or work is the row's phase; switching it moves the row to the edge of the warm-ups.
-  const setPhaseAt = (i, warm) => update(s => {
-    const e = s.active.entries[entryIdx]
+  const setPhaseAt = (i, warm) => update(s => editWorkoutSetPlan(s, entryIdx, e => {
     e.sets = warm ? makeWarmupAt(e.sets, i) : makeWorkAt(e.sets, i)
-  }, true)
+  }), true)
   const toggleFailureAt = i => update(s => {
     const e = s.active.entries[entryIdx]
     const [start, count] = setSpanAt(e.sets, i)
@@ -156,13 +156,12 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
   // still fires the rest timer / auto-advance / workout-complete flow.
   const setSide = (i, side, field, v) => {
     if (field !== 'w') return mutSet(i, row => setSideField(row, side, field, v))
-    update(s => {
-      const e = s.active.entries[entryIdx]
+    update(s => editWorkoutSetPlan(s, entryIdx, e => {
       const row = setSideField(e.sets[i], side, field, v)
       row.sides[side].weightOrigin = WEIGHT_ORIGIN_MANUAL
       e.sets[i] = row
       e.sets = cascadeWeight(e.sets, i, v, side, e.target?.backoffStep)
-    }, true)
+    }), true)
   }
   // Drop/burst edits accept an optional `side` ('L'|'R'): present for a per-side row (edits that
   // one limb's drop/burst), absent for a straight row (edits the row's own).
@@ -820,12 +819,10 @@ export function deleteActiveSet(idx, i, { editing = false } = {}) {
   const n = setNumberAt(e.sets, i)
   const warm = isWarmupRow(row)
   const token = { activeId: A.id, idx, entryId: e.id, i: start, rows: structuredClone(e.sets.slice(start, start + count)) }
-  useStore.getState().update(s => {
-    const en = s.active?.entries?.[idx]
-    if (!en) return
+  useStore.getState().update(s => editWorkoutSetPlan(s, idx, en => {
     if (editing) en.sets.splice(start, count)
     else en.sets = removeRowAt(en.sets, i)
-  }, true)
+  }), true)
   const msg = warm ? t('Warm-up gone.') : stopped ? t('Set {0} gone. Its timer stopped too.', n) : t('Set {0} gone.', n)
   ui.toast(msg, { action: t('Undo'), onAction: () => undoDeleteSet(token) })
   return true
@@ -843,10 +840,9 @@ export function undoDeleteSet(token) {
   const rows = token.rows || [token.row]
   const i = Math.min(token.i, A.entries[at].sets.length)
   shiftRowRefs(at, i, rows.length)
-  useStore.getState().update(s => {
-    const en = s.active.entries[at]
+  useStore.getState().update(s => editWorkoutSetPlan(s, at, en => {
     en.sets = rows.reduce((acc, r, k) => insertRowAt(acc, i + k, r), en.sets)
-  }, true)
+  }), true)
   setUI({ setFlash: { idx: at, i, id: ++flashSeq } })
   return true
 }
@@ -856,10 +852,9 @@ export function copyActiveSet(idx, i) {
   if (!e?.sets?.[i]) return false
   const { start, end } = copySpanAt(e.sets, i)
   shiftRowRefs(idx, end + 1, end - start + 1)
-  useStore.getState().update(s => {
-    const en = s.active?.entries?.[idx]
-    if (en) en.sets = copyRowAt(en.sets, i)
-  }, true)
+  useStore.getState().update(s => editWorkoutSetPlan(s, idx, en => {
+    en.sets = copyRowAt(en.sets, i)
+  }), true)
   setUI({ setFlash: { idx, i: end + 1, id: ++flashSeq } })
   useUI.getState().toast(t('Copied. One more like that one.'))
   return true
@@ -1127,9 +1122,10 @@ function ActiveWorkout() {
   const done = setsDoneActive(A)
 
   const mutEntry = (idx, fn) => update(s => { fn(s.active.entries[idx]) }, true)
+  const editSetPlan = (idx, fn) => update(s => editWorkoutSetPlan(s, idx, fn), true)
   // Clearing an optional field drops the key rather than storing null, so a set only carries
   // what was actually logged — in the session, in history and in a backup.
-  const setField = (idx, i, field, v) => mutEntry(idx, e => {
+  const setField = (idx, i, field, v) => (field === 'w' ? editSetPlan : mutEntry)(idx, e => {
     if (v == null) delete e.sets[i][field]; else e.sets[i][field] = v
     // Typing a duration IS the new plan, the same way ticking the row ends it: a plan a displaced
     // hold put aside must not outrank what you just typed, or the field would read 45 and the ▶
@@ -1144,7 +1140,7 @@ function ActiveWorkout() {
     }
   })
   const modeAt = idx => modeOf({ ...(A.entries[idx].target || {}), id: A.entries[idx].id })
-  const addSet = idx => mutEntry(idx, e => {
+  const addSet = idx => editSetPlan(idx, e => {
     const l = e.sets[e.sets.length - 1]
     const m = modeOf({ ...(e.target || {}), id: e.id })
     if (m === 'cardio') e.sets.push({ min: l ? l.min : (e.target.min || 20), speed: l ? l.speed : (e.target.speed || 8), ...inclineFrom(l), done: false })
@@ -1168,7 +1164,7 @@ function ActiveWorkout() {
         : row)
     }
   })
-  const removeSet = idx => mutEntry(idx, e => { e.sets = removeLastSet(e.sets) })
+  const removeSet = idx => editSetPlan(idx, e => { e.sets = removeLastSet(e.sets) })
   const addWarmup = idx => mutEntry(idx, e => {
     const m = modeOf({ ...(e.target || {}), id: e.id })
     // A warm-up of a dumbbell lift lands on a bell you own when the profile lists them (#376).
@@ -1482,6 +1478,10 @@ function ActiveWorkout() {
     // The sheet opens at the plan's sets and reps rather than today's prescription (see
     // plannedConfigOf), so saving it unchanged rebuilds the rows the entry already has.
     const opened = plannedConfigOf(entry)
+    const slot = entry.sourceSlot != null && routine?.ex[routineSlotIndex(routine, state.active.entries, idx)]
+    if (!state.active.backfill && !state.active.editingWorkoutId && hasSetWeights(slot)) {
+      Object.assign(opened, { sets: slot.sets, weight: slot.weight, setWeights: slot.setWeights })
+    }
     exConfigSheet(exOr(entryId), opened, cfg => {
       // Store updates clone the state tree. If this exact object is no longer at the captured
       // index, the list changed while the sheet was open; an id check alone cannot distinguish
@@ -1500,7 +1500,7 @@ function ActiveWorkout() {
         // The weight the sheet showed is today's. Left as it was, it is not an edit of the plan's:
         // stamped as the plan, a later edit of the reps would restart from today's load as though
         // it had been typed in (nextPrescription), so the plan keeps its own.
-        if ((cfg.weight || 0) === (opened.weight || 0) && activeEntry.planned?.weight != null) full.weight = activeEntry.planned.weight
+        if (!hasSetWeights(opened) && (cfg.weight || 0) === (opened.weight || 0) && activeEntry.planned?.weight != null) full.weight = activeEntry.planned.weight
         const activeRoutine = s.routines.find(r => r.id === activeEntry.rid)
         // A config without a set count keeps the rows the session already has.
         if (!(full.sets > 0)) full.sets = activeEntry.sets.filter(x => !isWarmupRow(x)).length || 1
@@ -1522,7 +1522,10 @@ function ActiveWorkout() {
         activeEntry.planned = built.planned
         if (built.carried) activeEntry.carried = true
         else delete activeEntry.carried
-        activeEntry.sets = [...doneWarm, ...freshWarm.slice(doneWarm.length), ...doneWork, ...freshWork.slice(doneWork.length)]
+        const rows = [...doneWarm, ...freshWarm.slice(doneWarm.length), ...doneWork, ...freshWork.slice(doneWork.length)]
+        if (cfg.sets !== opened.sets || (cfg.weight ?? 0) !== (opened.weight ?? 0) || JSON.stringify(cfg.setWeights) !== JSON.stringify(opened.setWeights)) {
+          editWorkoutSetPlan(s, idx, e => { e.sets = rows })
+        } else activeEntry.sets = rows
       })
     }, null, routine)
   }

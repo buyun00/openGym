@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { parseHTML } from 'linkedom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Workout from './Workout.jsx'
+import { buildCombinedEntries } from '../lib/session-merge.js'
 
 // This suite pins down the superset stepper regression: one tap on a +/- button must move the
 // value by exactly one step. The bug was a stale closure — in a superset both ExerciseBlock
@@ -148,6 +149,19 @@ afterEach(async () => {
 })
 
 describe('superset stepper — one tap moves one step', () => {
+  it('writes a tapped load to the source routine and opens the next workout with those loads', async () => {
+    const routine = { id: 'bench', name: 'Bench', ex: [
+      { id: '0025', sets: 3, reps: 5, weight: 60, sg: 'pair' },
+      { id: '0027', sets: 1, reps: 8, weight: 20, sg: 'pair' },
+    ] }
+    const st = { ...workout([]), routines: [routine] }
+    await mount(buildCombinedEntries(st, ['bench']).entries)
+    mocks.S.routines = [routine]
+    await tap(stepperButton(0, 2, 0, 'Increase'))
+    await tap(stepperButton(0, 0, 0, 'Decrease'))
+    expect(mocks.S.routines[0].ex[0].setWeights).toEqual([57.5, 57.5, 62.5])
+    expect(buildCombinedEntries(mocks.S, ['bench']).entries[0].sets.map(s => s.w)).toEqual([57.5, 57.5, 62.5])
+  })
   // Weight steps by 2.5. A single tap on the first exercise of a superset must land on 62.5,
   // not stay at 60 waiting for a second tap.
   it('increments a superset member weight by one step per tap', async () => {

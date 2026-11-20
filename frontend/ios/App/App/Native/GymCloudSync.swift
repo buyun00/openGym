@@ -63,6 +63,7 @@ final class GymCloudSync {
     @ObservationIgnored private var connection: GymConnection?
     @ObservationIgnored private var cache: Cache?
     @ObservationIgnored private var scheduled: Task<Void, Never>?
+    @ObservationIgnored private var syncWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private var bridge: JSContext?
     @ObservationIgnored private var storageError: String?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -199,14 +200,24 @@ final class GymCloudSync {
     }
 
     func sync(store: GymStore) async {
-        guard !busy else { return }
+        if busy {
+            await withCheckedContinuation { syncWaiters.append($0) }
+            return
+        }
         if connection == nil || storageError != nil { restore(into: store) }
         guard connection != nil else { return }
         scheduleEvents()
         busy = true; errorMessage = nil; status = "正在同步"
-        defer { busy = false }
+        defer { endSync() }
         do { try await exchange(store: store) }
         catch { errorMessage = error.localizedDescription; status = "未同步 · 本机记录已保留" }
+    }
+
+    private func endSync() {
+        busy = false
+        let waiters = syncWaiters
+        syncWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 
     private func exchange(store: GymStore) async throws {
@@ -271,7 +282,7 @@ final class GymCloudSync {
     func downloadServerCopy(store: GymStore) async {
         guard let auth = connection, !busy else { return }
         busy = true; errorMessage = nil
-        defer { busy = false }
+        defer { endSync() }
         do {
             if let storageError { throw GymSyncError(message: storageError) }
             let response = try await request(base: auth.base, path: "/api/data", token: auth.token)

@@ -3,6 +3,7 @@ import { defaultConfig, isBw, modeOf, MAX_PLANNED_WARMUPS, NOTE_MAX } from './hi
 import { isAssisted, isBodyweightEq, isCardio } from './exercises.js'
 import { sessionsFor } from './progression.js'
 import { isWarmupRow } from './workout-model.js'
+import { weightsFromRows, scalarWeight, hasSetWeights } from './set-weights.js'
 
 /**
  * Create a deep copy of a routine with a new id and a "(Copy)" suffix.
@@ -137,6 +138,7 @@ export function replaceSlotExercise(slot, id, S, rid) {
     return { id, ...defaultConfig(id), ...Object.fromEntries(kept.map(key => [key, old[key]])) }
   }
   const { id: _replaced, bodyweight: _flag, assisted: _assisted, side: _side, ...carried } = old
+  delete carried.setWeights
   const out = { id, ...carried }
   if (isCardio(id)) return out
   if (isBw(old) !== isBodyweightEq(id)) {
@@ -167,12 +169,52 @@ export function replaceSlotExercise(slot, id, S, rid) {
 export function routineSlotIndex(routine, entries, idx) {
   const entry = entries?.[idx]
   if (!entry || !routine || !Array.isArray(routine.ex) || entry.rid !== routine.id) return -1
+  if (entry.sourceSlot != null) {
+    if (typeof entry.sourceSlot === 'string')
+      return routine.ex.findIndex(slot => slot.id === entry.id && slot._nativeId === entry.sourceSlot)
+    const matches = routine.ex.map((slot, i) => slot.id === entry.id ? i : -1).filter(i => i >= 0)
+    return matches.length === entry.sourceSlot.total ? matches[entry.sourceSlot.occurrence] ?? -1 : -1
+  }
   const twinsBefore = entries.slice(0, idx).filter(e => e && e.rid === routine.id && e.id === entry.id).length
   let seen = 0
   for (let i = 0; i < routine.ex.length; i++) {
     if (routine.ex[i]?.id === entry.id && seen++ === twinsBefore) return i
   }
   return -1
+}
+
+// Only a live edit of a routine's own work rows changes its prescription. Taking a tick,
+// editing history, or adding a session-only exercise never enters the routine write path.
+export function editWorkoutSetPlan(state, idx, edit) {
+  const active = state.active
+  const entry = active?.entries?.[idx]
+  if (!entry) return
+  const routine = entry.sourceSlot != null && !active.backfill && !active.editingWorkoutId
+    ? state.routines?.find(r => r.id === entry.rid) : null
+  const slot = routine?.ex?.[routineSlotIndex(routine, active.entries, idx)]
+  if (!slot || modeOf(slot) !== modeOf({ ...entry.target, id: entry.id })) { edit(entry); return }
+  const before = weightsFromRows(entry.sets)
+  edit(entry)
+  let weights = weightsFromRows(entry.sets)
+  if (!weights.length || JSON.stringify(weights) === JSON.stringify(before)) return
+  // The active rows are a snapshot. Preserve other loads (and any new tail) already synced
+  // into the routine when the user changes one weight in that snapshot.
+  if (weights.length === before.length && hasSetWeights(slot)) {
+    const changed = weights.map((w, i) => JSON.stringify(w) !== JSON.stringify(before[i]))
+    const count = Math.max(slot.sets ?? before.length, changed.lastIndexOf(true) + 1)
+    weights = Array.from({ length: count }, (_, i) => changed[i] ? weights[i] : slot.setWeights[i] ?? slot.weight ?? 0)
+  }
+  slot.sets = weights.length
+  if (modeOf(slot) !== 'cardio') {
+    slot.weight = scalarWeight(weights[0])
+    slot.setWeights = weights
+    if (slot.pyramid?.length) {
+      const resize = values => weights.map((_, i) => values[Math.min(i, values.length - 1)])
+      slot.pyramid = resize(slot.pyramid)
+      if (slot.pyramidRest?.length) slot.pyramidRest = resize(slot.pyramidRest)
+      slot.pyramidWeight = weights.map(scalarWeight)
+    }
+  }
 }
 
 // What the exercise config sheet writes into a routine slot that a session can also change: the

@@ -3,13 +3,18 @@ import Foundation
 extension GymStore {
     // Every training edit uses the same atomic persistence boundary. A failed write keeps
     // the last durable session visible, including Finish / Discard and the rest deadline.
-    func mutateActive(_ change: (inout WorkoutSession) -> Void) {
+    func mutateActive(savingSetPlanFor exerciseID: UUID? = nil, _ change: (inout WorkoutSession) -> Void) {
         guard var session = active else { return }
         let previous = session
+        let previousRoutines = routines
         change(&session)
+        if let exerciseID, let entry = session.exercises.first(where: { $0.id == exerciseID }),
+           let old = previous.exercises.first(where: { $0.id == exerciseID }) {
+            WorkoutLogic.saveSetPlan(for: entry, previous: old, in: &routines)
+        }
         session.cardioTimer = WorkoutLogic.activeCardioTimer(in: session)
         active = session
-        if !save() { active = previous }
+        if !save() { active = previous; routines = previousRoutines }
         restEndsAt = active?.restEndsAt
         if previous.restEndsAt != restEndsAt { refreshWorkoutAlerts() }
     }
@@ -31,6 +36,7 @@ extension GymStore {
 
     func startFreestyle() {
         guard active == nil else { tab = .workout; return }
+        cancelWorkoutStart()
         active = WorkoutSession(id: UUID(), name: "自由训练", startedAt: Date(), finishedAt: nil, exercises: [])
         tab = .workout
         if !save() { active = nil }
@@ -41,18 +47,10 @@ extension GymStore {
             let mode = slot.mode ?? Catalogue.byId[slot.exerciseId]?.workoutMode ?? .reps
             let previous = WorkoutLogic.previous(slot.exerciseId, mode: mode, in: workouts, forProgression: true)?.1
             let completed = previous?.sets.filter(\.done) ?? []
-            let sets = (0..<max(1, slot.setCount)).map { index in
-                var set = WorkoutLogic.seed(mode: mode, reps: slot.reps,
-                                           previous: completed.isEmpty ? nil : completed[min(index, completed.count - 1)])
-                if completed.isEmpty, let weight = slot.weight { set.weight = weight }
-                if let minutes = slot.minutes { set.minutes = minutes }
-                if let speed = slot.speed { set.speed = speed }
-                if let incline = slot.incline { set.incline = incline }
-                if let seconds = slot.seconds { set.seconds = seconds }
-                return set
-            }
+            let sets = WorkoutLogic.plannedSets(for: slot, mode: mode, previous: completed)
             var exercise = WorkoutExercise(id: UUID(), exerciseId: slot.exerciseId, name: slot.name, sets: sets, mode: mode)
             exercise.routineId = routine.id
+            exercise.routineSlotId = slot.id
             exercise.note = slot.note ?? (previous?.notePinned == true ? previous?.note : nil)
             exercise.notePinned = previous?.notePinned
             return exercise
@@ -95,8 +93,8 @@ extension GymStore {
         }
     }
 
-    func updateWorkoutExercise(_ id: UUID, _ change: (inout WorkoutExercise) -> Void) {
-        mutateActive { session in
+    func updateWorkoutExercise(_ id: UUID, savingSetPlan: Bool = false, _ change: (inout WorkoutExercise) -> Void) {
+        mutateActive(savingSetPlanFor: savingSetPlan ? id : nil) { session in
             guard let index = session.exercises.firstIndex(where: { $0.id == id }) else { return }
             change(&session.exercises[index])
         }
@@ -112,14 +110,14 @@ extension GymStore {
     }
 
     func copySet(exercise: UUID, set: UUID) {
-        updateWorkoutExercise(exercise) { entry in
+        updateWorkoutExercise(exercise, savingSetPlan: true) { entry in
             guard let index = entry.sets.firstIndex(where: { $0.id == set }) else { return }
             entry.sets.insert(WorkoutLogic.copy(entry.sets[index]), at: index + 1)
         }
     }
 
     func setMetric(_ metric: WorkoutMetric, exercise: UUID, set: UUID, value: Double?) {
-        updateWorkoutExercise(exercise) { entry in
+        updateWorkoutExercise(exercise, savingSetPlan: metric == .weight) { entry in
             let mode = entry.mode ?? WorkoutCatalogue.records[entry.exerciseId]?.mode ?? .reps
             WorkoutLogic.updateMetric(metric, value: value, setID: set, mode: mode, in: &entry.sets)
         }

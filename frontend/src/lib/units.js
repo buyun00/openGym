@@ -6,6 +6,7 @@ import { isSideSet, syncSideAggregate } from './workout-model.js'
 import { workoutVolume } from './history.js'
 import { EXIDX } from './exercises.js'
 import { defaultBarWeight } from './bar.js'
+import { hasSetWeights, mapSetWeights } from './set-weights.js'
 
 const LB_PER_KG = 2.2046226218
 
@@ -39,6 +40,7 @@ const convTarget = (cfg, from, to) => {
   if (!cfg || typeof cfg !== 'object') return cfg
   const out = { ...cfg }
   if (out.weight != null) out.weight = convertWeight(out.weight, from, to)
+  if (hasSetWeights(out)) out.setWeights = mapSetWeights(out.setWeights, w => convertWeight(w, from, to))
   // A per-exercise increment is a load too — 2.5 kg is 5 lb, not 2.5 lb.
   if (out.inc > 0 && (out.mode == null || out.mode === 'reps')) out.inc = convertWeight(out.inc, from, to)
   if (Array.isArray(out.warmup)) out.warmup = out.warmup.map(w => (w && w.weight != null ? { ...w, weight: convertWeight(w.weight, from, to) } : w))

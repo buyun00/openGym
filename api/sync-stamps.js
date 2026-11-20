@@ -442,6 +442,23 @@ export function keepUnknown(cur, next) {
   return next;
 }
 
+// A backend editor may know only the flat weight. If it deliberately changes that field
+// over the revision it read, an unchanged per-set list must not hide the new load.
+function applyFlatWeightEdits(cur, next) {
+  for (const [oldRoutine, routine] of pairItems(list(cur.routines), list(next.routines))) {
+    const oldSlots = list(oldRoutine?.ex);
+    if (!oldSlots.some(slot => Array.isArray(slot?.setWeights) && slot.setWeights.length)) continue;
+    for (const [old, slot] of pairItems(oldSlots, list(routine?.ex))) {
+      if (!Array.isArray(old?.setWeights) || !old.setWeights.length || !Number.isFinite(slot?.weight)
+          || slot.weight < 0 || old.weight === slot.weight || !same(old.setWeights, slot.setWeights)) continue;
+      // Extra sets use the flat weight too. Bound the allocation to the list already on disk.
+      slot.setWeights = old.setWeights.slice(0, slot.sets).fill(slot.weight);
+      if (Array.isArray(slot.pyramidWeight) && same(slot.pyramidWeight, old.pyramidWeight))
+        slot.pyramidWeight = slot.setWeights.slice();
+    }
+  }
+}
+
 // Step 3: an entry held while a removal on record says it was deleted after its last edit is
 // kept, and marked as added back.
 function keepHeld(next, now) {
@@ -497,6 +514,7 @@ export function stampPut(cur, next, { overRead = false, stamped = false, now = D
     const before = !stamped && report ? content(next) : null;
     if (!stamped) keepUnknown(cur, next);
     if (!stamped && overRead) {
+      applyFlatWeightEdits(cur, next);
       const fp = fingerprint(sent);
       const own = isMap(cur._unstamped) && cur._unstamped.fp === fp ? cur._unstamped : null;
       stampUnstamped(cur, next, sent, t, own);

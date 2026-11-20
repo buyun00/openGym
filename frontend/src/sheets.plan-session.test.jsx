@@ -5,7 +5,7 @@
 // what the workout screen would render.
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { beginWorkout, finishWorkout } from './sheets.jsx'
+import { beginWorkout, finishWorkout, startFlow } from './sheets.jsx'
 import { DEF, useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { isWarmupRow } from './lib/workout-model.js'
@@ -47,6 +47,28 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers() })
 
 describe('what you plan is what you train', () => {
+  it('a connected start waits for the server and a resume keeps the workout already on screen', async () => {
+    install([{ id: 'A', name: 'Plan', ex: [{ id: BENCH, sets: 2, reps: 8, weight: 30 }] }])
+    const original = useStore.getState().pullState
+    let downloaded
+    const pullState = vi.fn(() => new Promise(resolve => { downloaded = resolve }))
+    useStore.setState({ user: { id: 'athlete' }, pullState })
+    try {
+      const starting = startFlow(['A'])
+      expect(S().active).toBeNull()
+      expect(pullState).toHaveBeenCalledOnce()
+      const next = clone(S())
+      Object.assign(next.routines[0].ex[0], { sets: 3, weight: 40, setWeights: [40, 45, 50] })
+      useStore.setState({ S: next })
+      downloaded()
+      await starting
+      expect(rowsOf('A')).toEqual(['40x8', '45x8', '50x8'])
+      const id = S().active.id
+      await startFlow(['A'])
+      expect(S().active.id).toBe(id)
+      expect(pullState).toHaveBeenCalledOnce()
+    } finally { useStore.setState({ pullState: original, user: null }) }
+  })
   it('a routine edited from 2 × 15 to 2 × 10 opens at 10 on the next training day', () => {
     install([{ id: 'A', name: 'Plan A', emoji: 'dumbbell', ex: [{ id: BENCH, sets: 2, reps: 15, weight: 50, mode: 'reps' }] }])
     startOn('2026-09-07', ['A'])

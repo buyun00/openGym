@@ -211,8 +211,7 @@ export function selectDeloadCandidate({ currentWeight, targetWeight, targetReps,
  * the seconds, for a hold) — as stamped on every entry a session builds (`entry.planned`, issue
  * #275). A prescription moves the session's `target`; this keeps what the routine said, which
  * is the only way the next session can tell a plan that was edited from one that progressed.
- * The weight never starts one on its own — history decides it — but once the sets or reps were
- * edited, a weight edited with them is the one the new plan opens at (nextPrescription).
+ * The stamped weight lets an explicit edit to this routine's load take effect on its next start.
  */
 export function plannedOf(cfg) {
   const c = cfg || {}
@@ -492,13 +491,14 @@ export function nextPrescription(S, cfg, routine) {
   // inside its new range, from what you managed).
   // A borrowed session saved before plans were stamped is taken as a different plan.
   const borrowed = !!routine?.id && last.rid !== routine.id
-  if (last.planned ? planChanged(last.planned, cfg) : borrowed) {
+  const changedLoad = last.planned && cfg.weight != null && last.planned.weight !== cfg.weight
+  if (last.planned ? planChanged(last.planned, cfg) || (!borrowed && changedLoad) : borrowed) {
     const why = borrowed ? ['First time in this routine, so starting from its own target.'] : ['Plan changed, so starting from your new target.']
     // The weight holds at what was last lifted, unless the plan's own weight is not the one the
     // session was built from: the same edit that turned 3 × 5 @ 100 into 3 × 10 @ 70 set 70,
     // and 102.5 × 10 is a load never lifted for those reps. A routine whose weight nobody
     // touched still carries the one it was created with, so there the history decides.
-    const set = cfg.weight > 0 && last.planned && (last.planned.weight ?? null) !== cfg.weight ? { weight: cfg.weight } : null
+    const set = changedLoad && (cfg.weight > 0 || !borrowed) ? { weight: cfg.weight } : null
     if (mode === 'time') return { policy, kind: 'hold', ...set, sec: cfg.sec || last.goal || undefined, why }
     if (!set && last.weight <= 0 && climbsReps(cfg)) return { policy, kind: 'hold', weight: 0, reps: cfg.reps || undefined, why }
     // A loaded lift logged at 0 had no weight typed in (see below): the plan's, if it has one.

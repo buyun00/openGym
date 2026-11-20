@@ -9,6 +9,7 @@ import { nextPrescription, applyPrescription, defaultIncrement, weightIncrement,
 import { dropGrid } from './plates.js'
 import { backoffStepOf, applyBackoff } from './backoff.js'
 import { dbLoadFor, historyAs, ownedWeightsFor } from './dumbbells.js'
+import { hasSetWeights } from './set-weights.js'
 
 /**
  * Where a planned session's reps come from (Settings → During a workout). 'plan', the default:
@@ -35,6 +36,15 @@ export function buildPlannedEntry(stored, cfg, routine, { noProg = false } = {})
   const st = historyAs(stored, cfg.id, meaning)
   // `plan` is kept on the entry purely so the workout can explain the number it chose.
   const plan = noProg ? { policy: 'off', kind: 'off' } : nextPrescription(st, cfg, routine)
+  const fixedWeights = hasSetWeights(cfg)
+  if (fixedWeights && (plan.weight != null || plan.sets != null)) {
+    // The saved work sets own their count and loads. Keep any rep or duration targets.
+    delete plan.weight
+    delete plan.sets
+    if (Array.isArray(plan.rowReps)) plan.rowReps = plan.rowReps.slice(0, cfg.sets)
+    plan.kind = 'hold'
+    delete plan.why
+  }
   // The warm-up ramp and the prescription snap to the exercise's own increment (1.25 kg
   // plates exist), not the unit default; a timed exercise's `inc` is seconds, so it keeps the
   // default for its optional load.
@@ -44,7 +54,7 @@ export function buildPlannedEntry(stored, cfg, routine, { noProg = false } = {})
   // lands on the heaviest bell under it, never on a weight in between that no rack holds.
   const ramp = (modeOf(cfg) === 'reps' && ownedWeightsFor(st, cfg)) || step
   // Back-off sets step down from the top set by the exercise's own step (lib/backoff.js).
-  const backoffStep = modeOf(cfg) === 'reps' && backoffStepOf(cfg, st.unit) ? step : 0
+  const backoffStep = !fixedWeights && modeOf(cfg) === 'reps' && backoffStepOf(cfg, st.unit) ? step : 0
   const built = applyPrescription(buildSets(st, cfg, { step: ramp, rid: routine?.id, useTarget: plan.kind === 'off', planReps }), plan, ramp, barFloor(st, cfg.id))
   const rows = backoffStep ? applyBackoff(built, backoffStep) : built
   const sets = applyIntensifierPlan(rows, cfg, dropGrid(st, cfg))
@@ -119,8 +129,15 @@ export function buildSessionEntries(st, r) {
   // The prescription is applied as the session is built, so you walk up to the bar with the
   // right weight already on the screen instead of being told about it afterwards.
   const noProg = r?.excludeFromProgression === true
-  return (r ? r.ex : []).map(cfg => {
+  const slots = r?.ex || []
+  const occurrences = new Map()
+  const totals = new Map()
+  for (const cfg of slots) totals.set(cfg.id, (totals.get(cfg.id) || 0) + 1)
+  return slots.map(cfg => {
+    const occurrence = occurrences.get(cfg.id) || 0
+    occurrences.set(cfg.id, occurrence + 1)
+    const sourceSlot = cfg._nativeId ?? { occurrence, total: totals.get(cfg.id) }
     const built = buildPlannedEntry(st, cfg, r, { noProg })
-    return { id: cfg.id, sg: cfg.sg, ...built, ...(noProg ? { noProg: true } : {}) }
+    return { id: cfg.id, sg: cfg.sg, sourceSlot, ...built, ...(noProg ? { noProg: true } : {}) }
   })
 }

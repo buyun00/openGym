@@ -86,6 +86,7 @@ enum WorkoutLogic {
         next.done = false
         next.rir = nil
         next.completedAt = nil
+        next.individualWeight = nil
         return next
     }
 
@@ -101,16 +102,68 @@ enum WorkoutLogic {
         return set
     }
 
+    static func plannedSets(for slot: RoutineExercise, mode: WorkoutMode, previous: [WorkoutSet]) -> [WorkoutSet] {
+        let weights = slot.setWeights ?? []
+        let individual = Set(weights.compactMap { $0 }).count > 1
+        return (0..<max(1, slot.setCount)).map { index in
+            let last = previous.isEmpty ? nil : previous[min(index, previous.count - 1)]
+            var set = seed(mode: mode, reps: slot.reps, previous: last)
+            if mode != .cardio {
+                let planned = weights.indices.contains(index) ? weights[index] : nil
+                // Older web plans use a flat zero for an unspecified starting load.
+                if let planned { set.weight = planned }
+                else if let weight = slot.weight, weight > 0 || !weights.isEmpty { set.weight = weight }
+                if individual, planned != nil { set.individualWeight = true }
+            }
+            if let minutes = slot.minutes { set.minutes = minutes }
+            if let speed = slot.speed { set.speed = speed }
+            if let incline = slot.incline { set.incline = incline }
+            if let seconds = slot.seconds { set.seconds = seconds }
+            return set
+        }
+    }
+
+    static func saveSetPlan(for entry: WorkoutExercise, previous: WorkoutExercise, in routines: inout [Routine]) {
+        guard let rid = entry.routineId, let slotID = entry.routineSlotId,
+              let r = routines.firstIndex(where: { $0.id == rid }),
+              let i = routines[r].exercises.firstIndex(where: { $0.id == slotID && $0.exerciseId == entry.exerciseId }),
+              !entry.sets.isEmpty else { return }
+        let countChanged = entry.sets.count != previous.sets.count
+        let weights = entry.sets.map(\.weight)
+        let previousWeights = previous.sets.map(\.weight)
+        let weighted = entry.mode != .cardio
+        guard countChanged || (weighted && weights != previousWeights) else { return }
+        var slot = routines[r].exercises[i]
+        guard slot.mode == nil || slot.mode == entry.mode else { return }
+        var saved: [Double?] = weights
+        // A foreground sync can bring in other set edits while this session stays on screen.
+        if !countChanged, let current = slot.setWeights,
+           let last = weights.indices.last(where: { weights[$0] != previousWeights[$0] }) {
+            saved = (0..<max(slot.setCount, last + 1)).map { index in
+                if weights.indices.contains(index), weights[index] != previousWeights[index] { return weights[index] }
+                if current.indices.contains(index) { return current[index] }
+                return slot.weight
+            }
+        }
+        slot.setCount = saved.count
+        if weighted {
+            slot.setWeights = saved
+            slot.weight = saved[0] ?? slot.weight
+        }
+        routines[r].exercises[i] = slot
+    }
+
     static func updateMetric(_ metric: WorkoutMetric, value: Double?, setID: UUID, mode: WorkoutMode,
                              in sets: inout [WorkoutSet]) {
         guard value?.isFinite ?? true, let index = sets.firstIndex(where: { $0.id == setID }) else { return }
         metric.apply(value, to: &sets[index])
+        if metric == .weight { sets[index].individualWeight = true }
         let updated = sets[index]
         for later in sets.indices.dropFirst(index + 1) where !sets[later].done {
             if mode == .reps {
-                sets[later].weight = updated.weight
+                if sets[later].individualWeight != true { sets[later].weight = updated.weight }
                 sets[later].reps = updated.reps
-            } else {
+            } else if metric != .weight || sets[later].individualWeight != true {
                 metric.apply(value, to: &sets[later])
             }
         }
@@ -158,6 +211,10 @@ enum WorkoutLogic {
         result.health = health
         result.finishedAt = date
         result.exercises.removeAll { !$0.sets.contains(where: \.done) }
+        for i in result.exercises.indices {
+            result.exercises[i].routineSlotId = nil
+            for j in result.exercises[i].sets.indices { result.exercises[i].sets[j].individualWeight = nil }
+        }
         result.restEndsAt = nil
         result.restOwner = nil
         result.restSetOwner = nil

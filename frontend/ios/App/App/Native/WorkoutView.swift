@@ -21,6 +21,7 @@ struct WorkoutView: View {
             }
         }
         .tint(.green)
+        .onDisappear { store.cancelWorkoutStart() }
         .onChange(of: store.active?.id, initial: true) { _, id in
             guard id != nil else {
                 if showingActive { onClose() }
@@ -56,6 +57,7 @@ struct WorkoutView: View {
 
     private var chooserList: some View {
         List {
+            if store.startingWorkout { ProgressView("正在同步训练计划…") }
             if !store.todayRoutines.isEmpty {
                 Section("今天的计划") {
                     ForEach(store.todayRoutines) { routine in

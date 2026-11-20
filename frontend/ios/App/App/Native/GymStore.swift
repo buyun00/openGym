@@ -10,6 +10,8 @@ final class GymStore {
     var week: [DayPlan] = (1...7).map { DayPlan(day: $0, routineIds: []) }
     var workouts: [WorkoutSession] = []
     var active: WorkoutSession?
+    private(set) var startingWorkout = false
+    @ObservationIgnored private var startTask: Task<Void, Never>?
     var weighIns: [WeighIn] = []
     var bodyMeasurements: [BodyMeasurement] = []
     var saveError: String?
@@ -140,30 +142,36 @@ final class GymStore {
     }
 
     func openToday() {
-        if active != nil {
-            tab = .workout
-            return
-        }
-        if todayRoutines.isEmpty {
-            tab = .plan
-            return
-        }
-        start(todayRoutines)
+        startToday()
     }
 
     func startToday() {
-        if active != nil {
-            tab = .workout
-            return
-        }
-        start(todayRoutines)
+        start(nil)
     }
 
-    func start(_ chosen: [Routine]) {
-        if active != nil {
-            tab = .workout
-            return
+    func start(_ chosen: [Routine]?) {
+        guard active == nil else { tab = .workout; return }
+        guard !startingWorkout else { return }
+        startingWorkout = true
+        let ids = chosen?.map(\.id)
+        startTask = Task {
+            await cloud.sync(store: self)
+            guard !Task.isCancelled else { return }
+            startingWorkout = false
+            startTask = nil
+            guard active == nil else { tab = .workout; return }
+            let latest = ids?.compactMap { self.routine($0) } ?? todayRoutines
+            beginWorkout(latest)
         }
+    }
+
+    func cancelWorkoutStart() {
+        startTask?.cancel()
+        startTask = nil
+        startingWorkout = false
+    }
+
+    private func beginWorkout(_ chosen: [Routine]) {
         let blocks = chosen.filter { !$0.exercises.isEmpty }
         guard !blocks.isEmpty else {
             tab = .plan
@@ -189,7 +197,7 @@ final class GymStore {
         if turningOn {
             let current = session.exercises[ei].sets[si]
             if let next = session.exercises[ei].sets.indices.first(where: { $0 > si && !session.exercises[ei].sets[$0].done }),
-               session.exercises[ei].sets[next].weight == 0 {
+               session.exercises[ei].sets[next].weight == 0, session.exercises[ei].sets[next].individualWeight != true {
                 session.exercises[ei].sets[next].weight = current.weight
                 session.exercises[ei].sets[next].reps = current.reps
             }
@@ -206,7 +214,7 @@ final class GymStore {
     }
 
     func addSet(exercise exerciseId: UUID) {
-        updateWorkoutExercise(exerciseId) { exercise in
+        updateWorkoutExercise(exerciseId, savingSetPlan: true) { exercise in
             let mode = exercise.mode ?? WorkoutCatalogue.records[exercise.exerciseId]?.mode ?? .reps
             let set = WorkoutLogic.seed(mode: mode, previous: exercise.sets.last)
             exercise.sets.append(set)
@@ -214,7 +222,12 @@ final class GymStore {
     }
 
     func deleteSet(exercise exerciseId: UUID, set setId: UUID) {
-        mutateActive { session in
+        if let entry = active?.exercises.first(where: { $0.id == exerciseId }),
+           entry.routineSlotId != nil, entry.sets.count == 1, entry.sets.first?.id == setId {
+            saveError = "计划动作至少保留一组。可以从本次训练移除整个动作。"
+            return
+        }
+        mutateActive(savingSetPlanFor: exerciseId) { session in
         guard let ei = session.exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         session.exercises[ei].sets.removeAll { $0.id == setId }
         if session.restSetOwner == setId {
@@ -331,11 +344,16 @@ final class GymStore {
     }
 
     func updateSlot(_ routineId: UUID, _ slotId: UUID, setCount: Int? = nil, reps: Int? = nil) {
-        guard let ri = routines.firstIndex(where: { $0.id == routineId }),
-              let si = routines[ri].exercises.firstIndex(where: { $0.id == slotId }) else { return }
-        if let setCount { routines[ri].exercises[si].setCount = min(20, max(1, setCount)) }
-        if let reps { routines[ri].exercises[si].reps = min(100, max(1, reps)) }
-        save()
+        updateRoutineWorkoutFields(routineId, slotId: slotId) { slot in
+            if let setCount {
+                let count = min(20, max(1, setCount))
+                if let weights = slot.setWeights, !weights.isEmpty {
+                    slot.setWeights = (0..<count).map { weights[min($0, weights.count - 1)] }
+                }
+                slot.setCount = count
+            }
+            if let reps { slot.reps = min(100, max(1, reps)) }
+        }
     }
 
     func addExercise(_ info: ExerciseInfo, to routineId: UUID) {

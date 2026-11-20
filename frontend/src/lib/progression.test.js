@@ -738,10 +738,7 @@ describe('an edited plan restarts progression (#275)', () => {
     expect(nextPrescription(S, { id: LIFT, sets: 2, reps: 15, weight: 40, prog: 'linear' }, R)).toMatchObject({ kind: 'up', weight: 42.5 })
   })
 
-  // The weight is history's call — unless the same edit that changed the sets or reps changed the
-  // plan's weight too. 102.5 × 10 after 3 × 5 @ 100 was rewritten as 3 × 10 @ 70 is a load never
-  // lifted for those reps, and "starting from your new target" would not be true of it.
-  it('opens at the plan\'s new weight when the edit changed it along with the reps', () => {
+  it('opens at the explicitly edited plan weight, including when only the load changed', () => {
     const five = logged(LIFT, { sets: 3, reps: 5, weight: 100 }, { sets: 3, reps: 5, weight: 102.5 }, 102.5, [5, 5, 5])
     const S = { unit: 'kg', workouts: [five] }
     const p = nextPrescription(S, { id: LIFT, sets: 3, reps: 10, weight: 70, prog: 'linear' }, R)
@@ -749,8 +746,8 @@ describe('an edited plan restarts progression (#275)', () => {
     expect(p.why[0]).toBe('Plan changed, so starting from your new target.')
     // Only the reps edited, the weight the routine was created with left alone: what was lifted.
     expect(nextPrescription(S, { id: LIFT, sets: 3, reps: 10, weight: 100, prog: 'linear' }, R)).toMatchObject({ kind: 'hold', weight: 102.5, reps: 10 })
-    // A weight edit alone restarts nothing: the sets and reps are the plan's, the history moves on.
-    expect(nextPrescription(S, { id: LIFT, sets: 3, reps: 5, weight: 70, prog: 'linear' }, R)).toMatchObject({ kind: 'up', weight: 105 })
+    expect(nextPrescription(S, { id: LIFT, sets: 3, reps: 5, weight: 70, prog: 'linear' }, R)).toMatchObject({ kind: 'hold', weight: 70 })
+    expect(nextPrescription(S, { id: LIFT, sets: 3, reps: 5, weight: 100, prog: 'linear' }, R)).toMatchObject({ kind: 'up', weight: 105 })
   })
 
   it('starts a new weight at the bottom of a double-progression range', () => {

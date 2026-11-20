@@ -102,6 +102,57 @@ final class WorkoutCoreTests: XCTestCase {
         XCTAssertEqual(WorkoutLogic.copy(previous).reps, 8)
     }
 
+    func testPlanLoadsBeatHistoryAndUnspecifiedLegacyLoadsUseHistory() throws {
+        var slot = RoutineExercise(id: UUID(), exerciseId: "0585", name: "腿屈伸", setCount: 3, reps: 8)
+        let previous = [30.0, 35.0].map { WorkoutSet(id: UUID(), weight: $0, reps: 12, done: true) }
+        func loads() -> [Double] { WorkoutLogic.plannedSets(for: slot, mode: .reps, previous: previous).map(\.weight) }
+        XCTAssertEqual(loads(), [30, 35, 35])
+        slot.weight = 0
+        XCTAssertEqual(loads(), [30, 35, 35])
+        slot.weight = 42.5
+        XCTAssertEqual(loads(), [42.5, 42.5, 42.5])
+        slot.setWeights = [0, 47.5, 50]
+        XCTAssertEqual(loads(), [0, 47.5, 50])
+        let encoded = try JSONEncoder().encode(slot)
+        XCTAssertEqual(try JSONDecoder().decode(RoutineExercise.self, from: encoded), slot)
+    }
+
+    func testManualWeightAndSetChangesUpdateOnlyTheirSourceSlot() {
+        var slot = RoutineExercise(id: UUID(), exerciseId: "0585", name: "腿屈伸", setCount: 3, reps: 8, weight: 40)
+        let first = slot
+        slot.id = UUID()
+        var routines = [Routine(id: UUID(), name: "A", exercises: [first, slot]), Routine(id: UUID(), name: "B", exercises: [first])]
+        let rows = WorkoutLogic.plannedSets(for: slot, mode: .reps, previous: [])
+        var entry = WorkoutExercise(id: UUID(), exerciseId: slot.exerciseId, name: slot.name, sets: rows,
+                                    mode: .reps, routineId: routines[0].id, routineSlotId: slot.id)
+        func edit(_ change: (inout [WorkoutSet]) -> Void) {
+            let before = entry
+            change(&entry.sets)
+            WorkoutLogic.saveSetPlan(for: entry, previous: before, in: &routines)
+        }
+        edit { $0[0].done = true }
+        XCTAssertNil(routines[0].exercises[1].setWeights)
+        edit { WorkoutLogic.updateMetric(.weight, value: 50, setID: rows[2].id, mode: .reps, in: &$0) }
+        edit { WorkoutLogic.updateMetric(.weight, value: 45, setID: rows[1].id, mode: .reps, in: &$0) }
+        edit { $0.insert(WorkoutLogic.copy($0[1]), at: 2) }
+        XCTAssertEqual(routines[0].exercises[1].setCount, 4)
+        XCTAssertEqual(routines[0].exercises[1].setWeights, [40, 45, 45, 50])
+        edit { $0.remove(at: 2) }
+        let saved = routines[0].exercises[1]
+        XCTAssertEqual(saved.setCount, 3)
+        XCTAssertEqual(WorkoutLogic.plannedSets(for: saved, mode: .reps, previous: []).map(\.weight), [40, 45, 50])
+        XCTAssertEqual(routines[0].exercises[0], first)
+        XCTAssertEqual(routines[1].exercises[0], first)
+        routines[0].exercises[1].setCount = 4
+        routines[0].exercises[1].setWeights = [40, 45, 55, 60]
+        edit { $0[1].weight = 47.5 }
+        XCTAssertEqual(routines[0].exercises[1].setWeights, [40, 47.5, 55, 60])
+        let updated = routines[0].exercises[1]
+        entry.routineSlotId = nil
+        edit { $0.removeLast() }
+        XCTAssertEqual(routines[0].exercises[1], updated)
+    }
+
     func testStrengthEditsCopyWeightAndRepsToLaterUnfinishedSets() {
         let completed = WorkoutSet(id: UUID(), weight: 20, reps: 8, done: true, completedAt: .now)
         let earlier = WorkoutSet(id: UUID(), weight: 25, reps: 9, done: false)

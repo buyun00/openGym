@@ -17,6 +17,7 @@ struct RoutineExercise: Codable, Identifiable, Hashable {
     var seconds: Double? = nil
     var note: String? = nil
     var weight: Double? = nil
+    var setWeights: [Double?]? = nil
 }
 
 struct Routine: Codable, Identifiable, Hashable {
@@ -37,6 +38,7 @@ struct WorkoutSet: Codable, Identifiable, Hashable {
     var incline: Double? = nil
     var seconds: Double? = nil
     var completedAt: Date? = nil
+    var individualWeight: Bool? = nil
 }
 
 struct WorkoutExercise: Codable, Identifiable, Hashable {
@@ -50,6 +52,7 @@ struct WorkoutExercise: Codable, Identifiable, Hashable {
     var noProgression: Bool? = nil
     var restSeconds: Int? = nil
     var routineId: UUID? = nil
+    var routineSlotId: UUID? = nil
 }
 
 struct WorkoutSession: Codable, Identifiable, Hashable {

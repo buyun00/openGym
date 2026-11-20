@@ -19,6 +19,7 @@ import { MAX_TRIPLE_SETS } from './progression.js'
 import { uid, todayISO, DAYN, weekOrder, weekStartOf, exCount } from './format.js'
 import { t, exerciseNameFor, exerciseNameClass, getLang, RTL_LANGS } from './i18n-core.js'
 import { convertWeight } from './units.js'
+import { hasSetWeights, mapSetWeights } from './set-weights.js'
 import { fmtSpeed, speedUnitOf } from './speed.js'
 import { MUSCLES, inMuscleOrder } from './muscles.js'
 
@@ -47,6 +48,7 @@ function convertedExercise(e, sourceUnit, destinationUnit) {
   if (!sourceUnit || sourceUnit === destinationUnit) return e
   const out = { ...e }
   if (out.weight != null) out.weight = convertWeight(out.weight, sourceUnit, destinationUnit)
+  if (hasSetWeights(out)) out.setWeights = mapSetWeights(out.setWeights, w => convertWeight(w, sourceUnit, destinationUnit))
   // A timed increment is seconds, not a load. Rep-mode increments are load overrides.
   if (modeOf(out) === 'reps' && out.inc > 0) out.inc = convertWeight(out.inc, sourceUnit, destinationUnit)
   if (Array.isArray(out.pyramidWeight)) out.pyramidWeight = out.pyramidWeight.map(w => (w > 0 ? convertWeight(w, sourceUnit, destinationUnit) : w))
@@ -69,6 +71,7 @@ function convertedBundle(bundle, destinationUnit) {
 // Keep only the meaningful config fields, so the file stays small and readable.
 function cleanEx(e) {
   const o = { id: e.id, sets: e.sets }
+  if (hasSetWeights(e)) o.setWeights = e.setWeights
   const mode = modeOf(e)
   if (mode === 'cardio') {
     if (e.min != null) o.min = e.min

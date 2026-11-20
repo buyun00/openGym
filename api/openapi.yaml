@@ -3502,7 +3502,29 @@ components:
         ex:
           type: array
           description: Exercises with set/rep targets.
-          items: { type: object, additionalProperties: true }
+          items:
+            type: object
+            properties:
+              sets: { type: integer, minimum: 1, description: Number of work sets. }
+              weight: { type: number, minimum: 0, description: Starting weight in the profile's unit. }
+              setWeights:
+                type: array
+                description: >-
+                  Explicit loads for the work sets in order, in the profile's unit. Zero is an
+                  explicit unloaded set. These take priority over the starting weight and history.
+                  Any sets beyond the list use the starting weight. On a default, unstamped
+                  write against the current baseRev, changing only the starting weight also
+                  replaces the existing per-set loads.
+                items:
+                  oneOf:
+                    - { type: number, minimum: 0 }
+                    - { type: 'null', description: Use the fallback for this set. }
+                    - type: array
+                      description: Left and right loads of a unilateral set.
+                      minItems: 2
+                      maxItems: 2
+                      items: { type: number, minimum: 0 }
+            additionalProperties: true
       additionalProperties: true
 
     BodyweightEntry:
